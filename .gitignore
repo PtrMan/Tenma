@@ -5,3 +5,5 @@ Out*.js
 Out*.hx
 
 TODO.txt
+
+*.code-workspace
