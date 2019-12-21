@@ -11,7 +11,7 @@
 //   := assignment
 //     * only with left hand side where constants are used
 //       ex: c(0) := ...
-// * only supports  sqrt(X), exp(X)  functions
+// * only supports  sqrt(X), exp(X), abs(X), pow(X, Y)  functions
 // * only supports variable constraints:
 //      ex:
 //         a(0) += b(I,J)
@@ -37,9 +37,9 @@
 // c(I) := a(I,J) * b(J)
 
 
+// TODO< unify := and aggregation to one enum value >
 
-// TODO< implement general function call Op FnCall(name:String, args:Op)
-// TODO< add function abs() >
+
 
 // TODO< track open instructions in tracer correctly >
 
@@ -82,7 +82,7 @@ class TestDyna {
 
         // sigmoid activation
         // l(0) := 1.0/(1.0 + exp(-x(0)))
-        var as1 = Term.Assign(Op.Arr("l",[Op.ConstInt(0)]),   Op.Div(Op.ConstFloat(1.0), Op.AddArr([Op.ConstFloat(1.0), Op.Exp(Op.UnaryNeg(Op.Arr("x", [Op.ConstInt(0)])))]) ));
+        var as1 = Term.Assign(Op.Arr("l",[Op.ConstInt(0)]),   Op.Div(Op.ConstFloat(1.0), Op.AddArr([Op.ConstFloat(1.0), Op.FnCall("exp", [Op.UnaryNeg(Op.Arr("x", [Op.ConstInt(0)]))])]) ));
         Executive.execAssign(as1, varFile);
 
         // c(0) := a(0)*b(0) + l(0)
@@ -101,11 +101,6 @@ class TestDyna {
             );
 
             assigns = assigns.concat(Unroller.unroll(as2, varFile));
-        }
-
-
-        for(i in 0...9) {
-            assigns.push( Term.Assign(Op.Arr("c",[Op.ConstInt(i)]), Op.MulArr([Op.Arr("a", [Op.ConstInt(0)]), Op.Arr("b", [Op.ConstInt(i)])])));
         }
 
         for(iX in assigns) {
@@ -310,11 +305,8 @@ class Unroller {
                         internalRec(arg0);
                         internalRec(arg1);
 
-                        case Exp(arg):
-                        internalRec(arg);
-
-                        case Sqrt(arg):
-                        internalRec(arg);
+                        case FnCall(name, args):
+                        for(iArg in args) internalRec(iArg);
 
                         case UnaryNeg(arg):
                         internalRec(arg);
@@ -436,11 +428,8 @@ class Unroller {
             case Div(arg0, arg1):
             return Div(replaceVar(arg0, varname, replace), replaceVar(arg1, varname, replace));
 
-            case Exp(arg):
-            return Exp(replaceVar(arg, varname, replace));
-
-            case Sqrt(arg):
-            return Sqrt(replaceVar(arg, varname, replace));
+            case FnCall(name, args):
+            return FnCall(name, args.map(iArg -> replaceVar(iArg, varname, replace)));
 
             case UnaryNeg(arg):
             return UnaryNeg(replaceVar(arg, varname, replace));
@@ -523,11 +512,8 @@ class Unroller {
             retArrAccess(arg0, res);
             retArrAccess(arg1, res);
 
-            case Exp(arg):
-            retArrAccess(arg, res);
-
-            case Sqrt(arg):
-            retArrAccess(arg, res);
+            case FnCall(_, args):
+            for(iArg in args) retArrAccess(iArg, res);
 
             case UnaryNeg(arg):
             retArrAccess(arg, res);
@@ -625,11 +611,14 @@ class Executive {
             case Div(arg0, arg1):
             return calc(arg0, varFile)/calc(arg1, varFile);
 
-            case Exp(arg):
+            case FnCall("exp",[arg]):
             return Math.exp(calc(arg, varFile));
-
-            case Sqrt(arg):
+            case FnCall("sqrt",[arg]):
             return Math.sqrt(calc(arg, varFile));
+            case FnCall("abs",[arg]):
+            return Math.abs(calc(arg, varFile));
+            case FnCall("pow",[arg0,arg1]):
+            return Math.pow(calc(arg0, varFile),calc(arg1, varFile));
 
             case UnaryNeg(arg):
             return -calc(arg, varFile);
@@ -639,6 +628,9 @@ class Executive {
 
             case TempVal(name):
             throw "Not implemented!!";
+
+            case _:
+            throw "Invalid!";
         }
     }
 }
@@ -651,6 +643,7 @@ enum Term {
     Assign(dest:Op, source:Op); // assignment: ex: b(0) := a(0)
 }
 
+// TODO< rename to Expr >
 enum Op {
     Var(name:String); // variable access, ex: a(I), where I is the variable
     ConstFloat(val:Float);
@@ -660,8 +653,7 @@ enum Op {
     MulArr(args: Array<Op>);
     Div(arg0:Op, arg1:Op);
 
-    Exp(arg: Op);
-    Sqrt(arg: Op);
+    FnCall(name:String, args:Array<Op>); // generalized function call
 
     UnaryNeg(arg: Op); // unary negation
 
@@ -700,11 +692,8 @@ class OpUtils {
             case Div(arg0, arg1):
             return "("+convToStr(arg0)+"/"+convToStr(arg1)+")";
 
-            case Exp(arg):
-            return 'exp(${convToStr(arg)})';
-
-            case Sqrt(arg):
-            return 'sqrt(${convToStr(arg)})';
+            case FnCall(name, args):
+            return '$name(${args.map(iArg->convToStr(iArg))})';
 
             case UnaryNeg(arg):
             return "-"+convToStr(arg);
@@ -770,7 +759,6 @@ class TracerEmitter {
 
 // used to assign a cartesian product to the indices of arrays
 // TODO< implement integer constraint ex: a(I,0) >
-// TODO< implement constraint ex: a(I,I) >
 class FnConstraintSolver {
     // TODO< rename to calcArrConstraints() >
     // compute all possible constraints on indices of array access
