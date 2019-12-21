@@ -38,6 +38,9 @@
 
 
 
+// TODO< implement integer constraint ex: a(I,0) >
+
+
 
 
 // TODO< support array based storage >
