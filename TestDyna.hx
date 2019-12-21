@@ -1,8 +1,34 @@
 // my own small Dyna inspired implementation
 // tailored toward ML'ish puropses
 
+// limitations
+// * only supports forward inference.
+//   Implies that no backward queries are implemented at all.
+// * only supports
+//   += aggregation
+//     * only with left hand side where constants are used
+//       ex: c(0) := ...
+//   := assignment
+//     * only with left hand side where constants are used
+//       ex: c(0) := ...
+// * only supports  sqrt(X), exp(X)  functions
+// * only supports variable constrains:
+//      ex:
+//         a(0) += b(I,J)
+//   doesn't support integer constraints
+//      ex:
+//         a(0) += b(0,J)
+//   doesn't support variable constraints
+//      ex:
+//         a(0) += b(I,I)
+
 // HANDLING:< handles one variable in add accumulation
 //    ex: c(0) += a(I)*b(I) >
+
+// TODO< unittest assignConstraint() >
+
+// TODO< unittest ConstraintUtils.intersection() >
+
 
 // TODO< handle two variable with assignment, ex >
 // c(I) := a(I,J) * b(J)
@@ -10,6 +36,18 @@
 // TODO< handle two variables with accumulator, ex >
 // c(I) += a(I,J) * b(J)
 
+// * find common indices
+// (0, 1)     (1)
+// (1, 1)
+// (0, 0)
+
+
+//   a(I,J) * b(J,K)
+// (I:0, J:1)   (J:1, K:6)
+// (I:0, J:3)
+
+// TODO< implement general function call Op FnCall(name:String, args:Op)
+// TODO< add function abs() >
 
 // TODO< track open instructions in tracer correctly >
 
@@ -22,23 +60,18 @@
 // TODO< support array based storage >
 // TODO< decide when to choose which datastructure >
 
+
+// TODO LOW < handle *= >
+//    needed for factorial example
+//    :- item(fact, int, 1).
+//    :- item(natural, bool, false).
+//    fact(N) *= I if natural(I) & I < N.
+//    natural(1)    |= true.
+//    natural(=I+1) |= natural(I).
+//    from https://web.archive.org/web/20170315003048/http://dyna.org/wiki/index.php/Examples#Factorial
+
 // TODO LATER< support min= aggregate >
 
-// associative array object
-class ArrObj {
-    // keys are strings of indices
-    public var map:Map<String, Float> = new Map<String, Float>();
-
-    public function new() {}
-
-    public static function create(arr:Array<Float>): ArrObj {
-        var res = new ArrObj();
-        for(iIdx in 0...arr.length) {
-            res.map.set('$iIdx', arr[iIdx]);
-        }
-        return res;
-    }
-}
 
 class TestDyna {
     public static function main() {
@@ -56,20 +89,20 @@ class TestDyna {
 
         // sigmoid activation
         // l(0) := 1.0/(1.0 + exp(-x(0)))
-        var as1 = X.Assign(Op.Arr("l",[Op.ConstInt(0)]),   Op.Div(Op.ConstFloat(1.0), Op.AddArr([Op.ConstFloat(1.0), Op.Exp(Op.UnaryNeg(Op.Arr("x", [Op.ConstInt(0)])))]) ));
+        var as1 = Term.Assign(Op.Arr("l",[Op.ConstInt(0)]),   Op.Div(Op.ConstFloat(1.0), Op.AddArr([Op.ConstFloat(1.0), Op.Exp(Op.UnaryNeg(Op.Arr("x", [Op.ConstInt(0)])))]) ));
         Executive.execAssign(as1, varFile);
 
         // c(0) := a(0)*b(0) + l(0)
-        var as0 = X.Assign(Op.Arr("c",[Op.ConstInt(0)]), Op.AddArr([Op.MulArr([Op.Arr("a", [Op.ConstInt(0)]), Op.Arr("b", [Op.ConstInt(0)])]), Op.Arr("l", [Op.ConstInt(0)])]));
+        var as0 = Term.Assign(Op.Arr("c",[Op.ConstInt(0)]), Op.AddArr([Op.MulArr([Op.Arr("a", [Op.ConstInt(0)]), Op.Arr("b", [Op.ConstInt(0)])]), Op.Arr("l", [Op.ConstInt(0)])]));
         Executive.execAssign(as0, varFile);
 
         trace(varFile.vars.get("l").map.get("0"));
         trace(varFile.vars.get("c").map.get("0"));
 
-        var assigns:Array<X> = [];
+        var assigns:Array<Term> = [];
 
         { // test "unroll" mechanism
-            var as2 = X.AccumulatorAdd(
+            var as2 = Term.AccumulatorAdd(
                 Op.Arr("c",[Op.ConstInt(0)]),
                 Op.Arr("a",[Op.Var("I")])
             );
@@ -79,7 +112,7 @@ class TestDyna {
 
 
         for(i in 0...9) {
-            assigns.push( X.Assign(Op.Arr("c",[Op.ConstInt(i)]), Op.MulArr([Op.Arr("a", [Op.ConstInt(0)]), Op.Arr("b", [Op.ConstInt(i)])])));
+            assigns.push( Term.Assign(Op.Arr("c",[Op.ConstInt(i)]), Op.MulArr([Op.Arr("a", [Op.ConstInt(0)]), Op.Arr("b", [Op.ConstInt(i)])])));
         }
 
         for(iX in assigns) {
@@ -95,7 +128,7 @@ class TestDyna {
 
         var tracerEmitter:TracerEmitter = new TracerEmitter();
         tracerEmitter.prgm = [
-            X.AccumulatorAdd(
+            Term.AccumulatorAdd(
                 Op.Arr("c",[Op.ConstInt(0)]),
                 Op.AddArr([Op.Arr("a",[Op.Var("I")]), Op.Arr("b",[Op.Var("I")])])
             ),
@@ -173,11 +206,11 @@ class UnittestUnroller {
 
 // unrolls a(0) += b(J)  to a(0) += b(0), a(0) += b(1), etc.
 class Unroller {
-    public static function unroll(x:X, varFile:VarFile):Array<X> {
-        var resArr:Array<X> = [];
+    public static function unroll(x:Term, varFile:VarFile):Array<Term> {
+        var resArr:Array<Term> = [];
 
         switch(x) {
-            case X.AccumulatorAdd(
+            case Term.AccumulatorAdd(
                 Op.Arr(arrNameDest, [Op.ConstInt(arrIdxDest)]),
                 sourceOp/*Op.Arr(arrNameSource, Op.Var(arrVarSource))*/):
             
@@ -192,6 +225,122 @@ class Unroller {
                     trace('$iKey : $varNames');
                 }
             }
+
+            // TODO REFACTOR< pull out and unittest >
+            // Compute which rules access which constraints.
+            // Does not "fold" rule accesses in any way
+            // 
+            // ex:    a(I,J,0)*b(I)
+            //     returns
+            //        [{rule:"a", params:[Op.Var("I"),Op.Var("J"),Op.ConstInt(0)]}, {rule:"b", params:[Op.Var("I")]}]
+            // 
+            // argument orders are always kept
+            function retRuleAccesses(op:Op): Array<{rule:String, params:Array<Op>}> {
+                // is a recursive function
+                var accesses = [];
+
+                // internal helper function to collect result recursivly
+                function internalRec(op:Op) {
+
+                    switch(op) {
+                        case Var(name):
+                        case ConstFloat(val):
+                        case ConstInt(val):
+                        
+                        case Arr(arrName, idxs): // ex: a(I)
+                        accesses.push({rule:arrName, params:idxs});
+                        
+                        case AddArr(args):
+                        for(iArg in args) internalRec(iArg);
+
+                        case MulArr(args):
+                        for(iArg in args) internalRec(iArg);
+
+                        case Div(arg0, arg1):
+                        internalRec(arg0);
+                        internalRec(arg1);
+
+                        case Exp(arg):
+                        internalRec(arg);
+
+                        case Sqrt(arg):
+                        internalRec(arg);
+
+                        case UnaryNeg(arg):
+                        internalRec(arg);
+
+                        case Trinary(cond, truePath, falsePath):
+                        internalRec(cond);
+                        internalRec(truePath);
+                        internalRec(falsePath);
+                        
+                        case TempVal(name):
+                    }
+                }
+
+                internalRec(op);
+
+                return accesses;
+            }
+            
+            var ruleAccesses:Array<{rule:String, params:Array<Op>}> = retRuleAccesses(sourceOp);
+
+            var commonVarAssignments: Array<VarAssigment> = []; // constraints which are common between all used rules
+            { // compute common constraints
+                { // init with first constraint
+                    var rule0 = ruleAccesses[0].rule; // name of the first accessed rule
+                    var params0 = ruleAccesses[0].params; // parameters
+
+                    if( !varFile.vars.exists(rule0) ) { // check if the accessed rule doesn't map to a variable
+                        throw 'Compilation Error: $rule0 is not a known variable!';
+                    }
+                    var arr:ArrObj = varFile.vars.get(rule0); // fetch array by name
+
+                    commonVarAssignments = FnConstraintSolver.assignConstraint(params0, arr);
+                }
+
+                // iterate over all other rules and narrow constraints down
+                for (iAccessIdx in 1...ruleAccesses.length) {
+                    var iRuleAccess = ruleAccesses[iAccessIdx];
+
+                    var ruleN = iRuleAccess.rule; // name of the first accessed rule
+                    var paramsN = iRuleAccess.params; // parameters
+
+                    if( !varFile.vars.exists(ruleN) ) { // check if the accessed rule doesn't map to a variable
+                        throw 'Compilation Error: $ruleN is not a known variable!';
+                    }
+                    var arr:ArrObj = varFile.vars.get(ruleN); // fetch array by name
+
+                    var thisVarAssigments = FnConstraintSolver.assignConstraint(paramsN, arr);
+                    commonVarAssignments = ConstraintUtils.calcCommonConstraints(commonVarAssignments, thisVarAssigments); // constraints have to have common elements if they intersect or they have to be the cartesian product if not
+                }
+            }
+
+
+
+
+            function instantiateBodyWithVarAssigment(varAssignment:VarAssigment):Term {
+                var righthandSide:Op = sourceOp;
+                
+                for (iAssigmentVarName in varAssignment.assignments.keys()) {
+                    var assignedIndex:Int = varAssignment.assignments.get(iAssigmentVarName); // the assigned index for the variable
+                    var replaceOp:Op = Op.ConstInt(assignedIndex);// Op with which we substitute it
+                    righthandSide = replaceVar(righthandSide, iAssigmentVarName, replaceOp);
+                }
+                
+                return
+                    Term.AccumulatorAdd(
+                        Op.Arr(arrNameDest, [Op.ConstInt(arrIdxDest)]),
+                        righthandSide);
+            }
+            
+            // instantiate body of Rule for each variable assignment
+            for (iVarAssignment in commonVarAssignments) {
+                resArr.push(instantiateBodyWithVarAssigment(iVarAssignment));
+            }
+
+
+            /*
 
             var keysAsArr:Array<String> = [for (v in arrayVarsByVariable.keys()) v];
             if (keysAsArr.length != 1) {
@@ -218,7 +367,7 @@ class Unroller {
 
 
             { // we need to allocate a new temporary value
-                resArr.push( X.Assign(Op.TempVal("temp0_0"), Op.ConstFloat(0.0)) );
+                resArr.push( Term.Assign(Op.TempVal("temp0_0"), Op.ConstFloat(0.0)) );
             }
 
             // unroll computation "loop"
@@ -230,7 +379,7 @@ class Unroller {
                 var righthandSide:Op = replaceVar(sourceOp, varname, replaceOp);
 
                 var createdAssign =
-                    X.Assign(
+                    Term.Assign(
                         Op.TempVal('temp0_${idxCnt+1}'),
                         Op.AddArr([Op.TempVal('temp0_${idxCnt}'), righthandSide]));
                 resArr.push(createdAssign);
@@ -238,11 +387,12 @@ class Unroller {
                 idxCnt++;
             }
 
-            var createdAssign = X.Assign(
+            var createdAssign = Term.Assign(
                 Op.Arr(arrNameDest, [Op.ConstInt(arrIdxDest)]),
                 Op.TempVal('temp0_${idxCnt+1}')
             );
             resArr.push(createdAssign);
+            */
 
             case AccumulatorAdd(_,_):
             throw "Not recognized!"; // TODO
@@ -404,7 +554,7 @@ class Executive {
     public function new() {}
 
     // executes assignment
-    public static function execAssign(assign:X, varFile:VarFile) {
+    public static function execAssign(assign:Term, varFile:VarFile) {
         switch (assign) {
             case Assign(dest, source):
 
@@ -420,7 +570,7 @@ class Executive {
 
     	            var arr:ArrObj = varFile.vars.get(name);
                     if (arr == null) {
-                        arr = new ArrObj();
+                        arr = new ArrObj(idxs.length);
                         varFile.vars.set(name, arr);
                     }
                     varFile.vars.get(name).map.set(idxStrKey, val);
@@ -497,8 +647,7 @@ class Executive {
 // TODO< OpUtils to convert to string description >
 
 
-// TODO< name >
-enum X {
+enum Term {
     AccumulatorAdd(dest:Op, source:Op); // ex: b(I) += a(I)
     Assign(dest:Op, source:Op); // assignment: ex: b(0) := a(0)
 }
@@ -570,117 +719,20 @@ class OpUtils {
     }
 }
 
-/*
-// converter to convert dyna to haxe
-class ConvertDynaToCode {
-    //public var tempCounter:Int = 0; // used to allocate temp values
-
-    //public var lines:Array<String> = []; // emitted lines
-
-    // target can be "haxe" or "cuda"
-    public var target:String = "cuda";
-
-    public function new() {}
-
-    public function convOp(op:Op):String {
-        switch(op) {
-            case Var(name):
-            throw "Not implemented";
-            case ConstFloat(val):
-            return '$val';
-            case ConstInt(val):
-            return '$val';
-
-            case Arr(name, idx):
-            if (target == "haxe") {
-                return "ctx.vars.get("+'${name}__$idx'+")"; // lookup in database
-            }
-            else {
-                return 'ctx->${name}__$idx'; // statically reference because GPU doesn't support lookup, and lookup is to slow
-            }
-
-            case AddArr(args):
-            {
-                var resArr:Array<String> = args.map(iArg -> convOp(iArg));
-                return "(" + resArr.join(" + ") + ")";
-            }
-
-            case MulArr(args):
-            {
-                var resArr:Array<String> = args.map(iArg -> convOp(iArg));
-                return "(" + resArr.join(" * ") + ")";
-            }
-
-            case Div(arg0, arg1):
-            return "("+convOp(arg0)+"/"+convOp(arg1)+")";
-
-            case Exp(arg):
-            if (target == "haxe") {
-                return 'Math.exp(${convOp(arg)})';
-            }
-            else {
-                return 'exp(${convOp(arg)})';
-            }
-
-            case UnaryNeg(arg):
-            return "-"+convOp(arg);
-
-            case Trinary(cond, truePath, falsePath):
-            return '((${convOp(cond)}) >= 0.5 ? (${convOp(truePath)}) : (${convOp(falsePath)}))';
-
-            case TempVal(name):
-            throw "Not implemented!!";
-        }
-    }
-
-    public function convAssign(assign:X): String {
-        switch (assign) {
-            case Assign(dest, source):
-            switch(dest) {
-                case Arr(name, idx):
-                if (target == "haxe") {
-                    return "ctx.vars.set("+'${name}__$idx, ${convOp(source)});';
-                }
-                else {
-                    return 'ctx->${name}__$idx = ${convOp(source)};'; // static reference
-                }
-
-                case _:
-                throw "Expected Arr!";
-            }
-            
-            case _:
-            throw "Not implemented!";
-        }
-    }
-
-    // returns the string of a function which executes a series of assigns statically
-    public function convAsFunction(assigns:Array<X>, name:String): String {
-        var res = "";
-        if (target == "haxe") res='public static function $name(ctx:Propagate) {\n';
-        else if(target == "cuda") res='__device__ void $name(Propagate *ctx) {\n';
-
-        res += [for (i in assigns) convAssign(i)].join("\n");
-        res += "\n}";
-        return res;
-    }
-}
-*/
-
 // tracks open expressions because variables changed
-class OpenX {
-    // open X's which need to get recomputed (in order)
-    // value is the name/id of the X
+class OpenTerm {
+    // open Term's which need to get recomputed (in order)
+    // value is the name/id of the Term
     public var open:Array<String> = [];
 
     public function new() {}
 }
 
-// tracer which tracks open X's and emits linearized code
+// tracer which tracks open Term's and emits linearized code
 class TracerEmitter {
-    public var emitted:Array<X> = []; // emitted result code of tracing
+    public var emitted:Array<Term> = []; // emitted result code of tracing
 
-    public var prgm:Array<X> = []; // actual interpreted program
+    public var prgm:Array<Term> = []; // actual interpreted program
 
     // open set
     public var open:Array<Int> = []; // indices of open instructions to compute
@@ -706,10 +758,221 @@ class TracerEmitter {
         var currentOpen:Int = open[0]; // current processed instruction
         open = open.slice(1, open.length); // remove first open
         
-        var instr:X = prgm[currentOpen]; // fetch instruction
-        emitted = emitted.concat(Unroller.unroll(instr, varFile)); // emit execution
+        var term:Term = prgm[currentOpen]; // fetch term
+        emitted = emitted.concat(Unroller.unroll(term, varFile)); // emit execution
 
         return true; // continue
+    }
+}
+
+
+
+
+
+// used to assign a cartesian product to the indices of arrays
+// TODO< implement integer constraint ex: a(I,0) >
+// TODO< implement constraint ex: a(I,I) >
+class FnConstraintSolver {
+    // TODO< rename to calcArrConstraints() >
+    // compute all possible constraints on indices of array access
+    // ex: a(I,J)
+    //
+    // result:
+    //  (I:0, J:5)
+    //  (I:1, J:3)    
+    public static function assignConstraint(indexConstraints:Array<Op>, arr:ArrObj): Array<VarAssigment> {
+        if (indexConstraints.length != arr.width) {
+            trace('internal error: expect same length');
+            return [];
+        }
+
+        var varAssignments: Array<VarAssigment> = [];
+        return [for (iIndex in arr.retIndices()) {
+            var varAssignment = new VarAssigment();
+
+            for(iCnstrtIdx in 0...indexConstraints.length) { // loop over constraints
+                var iiIndex:Int = iIndex[iCnstrtIdx]; // "real" index inside the datastructure
+                
+                var indexConstraint:Op = indexConstraints[iCnstrtIdx];
+                switch(indexConstraint) {
+                    case Var(varname):
+                    varAssignment.assignments.set(varname, iiIndex);
+                    case _:
+                    throw "not supported constraint!";
+                }
+            }
+
+            varAssignment;
+        }];
+    }
+}
+
+// constraint utilities
+class ConstraintUtils {
+    // ex: (a: 1, b: 1) (a: 1)  --> (a: 1, b: 1)
+    //     (a: 1, b: 2)             (a: 1, b: 2)
+
+    // ex: (a: 1, b: 1) (a: 1, c: 0)  --> (a: 1, b: 1, c: 0)
+    //     (a: 1, b: 2)                   (a: 1, b: 2, c: 0)
+
+
+    // ex: (a: 2, b: 1) (a: 1)  --> (empty, because a=1 doesn't appear in both sides)
+    
+    // TODO: handle non intersections as cartesian product
+    // ex: (a: 1)       (b: 1)   --> (a: 1, b: 1)
+    //     (a: 2)       (b: 3)       (a: 1, b: 3)
+    //                               (a: 2, b: 1)
+    //                               (a: 1, b: 3)
+    
+    public static function calcCommonConstraints(a:Array<VarAssigment>, b:Array<VarAssigment>):Array<VarAssigment> {
+        // TODO< check if vars intersect, call calcIntersect, else compute cartesian product >
+        return calcIntersect(a, b);
+    }
+
+    // computes intersection of constraints, only defined when variables match up
+    public static function calcIntersect(a:Array<VarAssigment>, b:Array<VarAssigment>):Array<VarAssigment> {
+        var intersection = [];
+        for(iA in a) {
+            for(iAVarname in iA.assignments.keys()) {
+                var iAValue = iA.assignments.get(iAVarname);
+                
+                for (iB in b) {
+                    var isBConstraintFullfilled = existInAssignment(
+                        iAVarname,
+                        iAValue,
+                        iB);
+                    
+                    if (isBConstraintFullfilled) {
+                        intersection.push(merge(iA,iB));
+                    }
+                }
+            }
+        }
+
+        return intersection;
+    }
+
+    // merges two var assigments into one
+    // ex: (a: 1, b: 1) (a: 1, c: 0)  --> (a: 1, b: 1, c: 0)
+    public static function merge(a:VarAssigment, b:VarAssigment): VarAssigment {
+        var result = new VarAssigment();
+        for(iAKey in a.assignments.keys()) {
+            var iValue = a.assignments.get(iAKey);
+            result.assignments.set(iAKey, iValue);
+        }
+        for(iBKey in b.assignments.keys()) {
+            if(!result.hasVar(iBKey)) {
+                var iValue = b.assignments.get(iBKey);
+                result.assignments.set(iBKey, iValue);
+            }
+        }
+
+        return result;
+    }
+
+    // do the constraints have common variables?
+    public static function haveCommonVars(a:VarAssigment, b:VarAssigment):Bool {
+        for (iAVarname in a.assignments.keys()) {
+            if (b.hasVar(iAVarname)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // exist the assignment in the assigments
+    private static function existInAssignment(
+        varname:String,
+        value:Int,
+        assignment:VarAssigment): Bool
+    {
+        if (!assignment.hasVar(varname)) {
+            return false;
+        }
+        return assignment.assignments.get(varname) == value;
+    }
+
+/* commented because it is outdated
+    public static function intersectionOLD(
+        a:Array< Array<{idx:Int, variableName:String}> >,
+        b:Array< Array<{idx:Int, variableName:String}> >)
+        :{a:Array< Array<{idx:Int, variableName:String}> >, b: Array< Array<{idx:Int, variableName:String}> >}
+    {
+        // exist the element in other?
+        function existInOther(
+            elem:{idx:Int, variableName:String},
+            other:Array<{idx:Int, variableName:String}>): Bool
+        {
+            return other.filter(iOther -> iOther.idx == elem.idx && iOther.variableName == elem.variableName).length > 0;
+        }
+
+
+        var aRes: Array< Array<{idx:Int, variableName:String}> > = [];
+        var bRes: Array< Array<{idx:Int, variableName:String}> > = [];
+
+        for(iA in a) {
+            var existAnyInOther = false;
+            for(iB in b) {
+                for(iiA in iA) {
+                    existAnyInOther = existAnyInOther || existInOther(iiA, iB);
+                }
+            }
+
+            var put = existAnyInOther; // put only into result if some match exists in the other
+
+            if (put) {
+                aRes.push(iA);
+            }
+        }
+
+        for(iB in b) {
+            var existAnyInOther = false;
+            for(iA in a) {
+                for(iiB in iB) {
+                    existAnyInOther = existAnyInOther || existInOther(iiB, iA);
+                }
+            }
+
+            var put = existAnyInOther; // put only into result if some match exists in the other
+
+            if (put) {
+                bRes.push(iB);
+            }
+        }
+
+        return {a:aRes, b:bRes};
+    }
+    */
+}
+
+// associative array object
+class ArrObj {
+    // keys are strings of indices
+    public var map:Map<String, Float> = new Map<String, Float>();
+
+    public var width:Int;
+
+    public function new(width) {
+        this.width=width;
+    }
+
+    // helper to return all possible indices
+    public function retIndices(): Array<Array<Int>> {
+        var res:Array<Array<Int>> = [];
+
+        for(iKey in map.keys()) {
+            res.push(iKey.split("_").map(v -> Std.parseInt(v))); // split by "_" because we seperate indices with it
+        }
+
+        return res;
+    }
+
+    public static function create(arr:Array<Float>): ArrObj {
+        var res = new ArrObj(1);
+        for(iIdx in 0...arr.length) {
+            res.map.set('$iIdx', arr[iIdx]);
+        }
+        return res;
     }
 }
 
@@ -745,3 +1008,14 @@ class SetUtil {
         return res;
     }
 }
+
+// used to remember and manipulate constraints for code-generation
+class VarAssigment {
+    public var assignments:Map<String, Int> = new Map<String, Int>();
+    public function new() {}
+    // does it have the variablename?
+    public function hasVar(varname:String) {
+        return assignments.exists(varname);
+    }
+}
+
