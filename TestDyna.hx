@@ -7,8 +7,6 @@
 // * only supports
 //   += aggregation
 //   := assignment
-//     * only with left hand side where constants are used
-//       ex: c(0) := ...
 // * only supports  sqrt(X), exp(X), abs(X), pow(X, Y)  functions
 // * only supports variable constraints:
 //      ex:
@@ -21,17 +19,15 @@
 //         a(0) += b(I,I)
 
 
+
 // TODO< unittest assignConstraint() >
 
 // TODO< unittest ConstraintUtils.intersection() >
 
 
 
-// TODO< handle two variable with assignment, ex >
-// c(I) := a(I,J) * b(J)
 
 
-// TODO< unify := and aggregation to one enum value >
 
 
 
@@ -55,7 +51,9 @@
 //    from https://web.archive.org/web/20170315003048/http://dyna.org/wiki/index.php/Examples#Factorial
 
 // TODO LATER< support min= aggregate >
+// TODO LATER< support max= aggregate >
 
+// TODO SCIFI< implement lexer and parser >
 
 class TestDyna {
     public static function main() {
@@ -74,11 +72,11 @@ class TestDyna {
 
         // sigmoid activation
         // l(0) := 1.0/(1.0 + exp(-x(0)))
-        var as1 = Term.Assign(Op.Arr("l",[Op.ConstInt(0)]),   Op.Div(Op.ConstFloat(1.0), Op.AddArr([Op.ConstFloat(1.0), Op.FnCall("exp", [Op.UnaryNeg(Op.Arr("x", [Op.ConstInt(0)]))])]) ));
+        var as1 = Term.Assign(Aggregation.NONE,Op.Arr("l",[Op.ConstInt(0)]),   Op.Div(Op.ConstFloat(1.0), Op.AddArr([Op.ConstFloat(1.0), Op.FnCall("exp", [Op.UnaryNeg(Op.Arr("x", [Op.ConstInt(0)]))])]) ));
         Executive.execAssign(as1, varFile);
 
         // c(0) := a(0)*b(0) + l(0)
-        var as0 = Term.Assign(Op.Arr("c",[Op.ConstInt(0)]), Op.AddArr([Op.MulArr([Op.Arr("a", [Op.ConstInt(0)]), Op.Arr("b", [Op.ConstInt(0)])]), Op.Arr("l", [Op.ConstInt(0)])]));
+        var as0 = Term.Assign(Aggregation.NONE,Op.Arr("c",[Op.ConstInt(0)]), Op.AddArr([Op.MulArr([Op.Arr("a", [Op.ConstInt(0)]), Op.Arr("b", [Op.ConstInt(0)])]), Op.Arr("l", [Op.ConstInt(0)])]));
         Executive.execAssign(as0, varFile);
 
         trace(varFile.vars.get("l").map.get("0"));
@@ -87,7 +85,7 @@ class TestDyna {
         var assigns:Array<Term> = [];
 
         { // test "unroll" mechanism
-            var as2 = Term.AccumulatorAdd(
+            var as2 = Term.Assign(Aggregation.ADD,
                 Op.Arr("c",[Op.ConstInt(0)]),
                 Op.Arr("a",[Op.Var("I")])
             );
@@ -95,21 +93,14 @@ class TestDyna {
             assigns = assigns.concat(Unroller.unroll(as2, varFile));
         }
 
-        for(iX in assigns) {
-            Sys.println(switch(iX) {
-                case AccumulatorAdd(dest, source):
-                '${OpUtils.convToStr(dest)} += ${OpUtils.convToStr(source)}';
-                case Assign(dest, src):
-                '${OpUtils.convToStr(dest)} := ${OpUtils.convToStr(src)}';
-            });
-        }
+        Sys.println(PrgmUtils.convToStr(assigns));
 
         { // gen code for a(I)*b(I)
             trace('-----');
 
             var tracerEmitter:TracerEmitter = new TracerEmitter();
             tracerEmitter.prgm = [
-                Term.AccumulatorAdd(
+                Term.Assign(Aggregation.ADD,
                     Op.Arr("c",[Op.ConstInt(0)]),
                     Op.MulArr([Op.Arr("a",[Op.Var("I")]), Op.Arr("b",[Op.Var("I")])])
                 ),
@@ -121,14 +112,7 @@ class TestDyna {
             }
 
             // debug emitted program
-            for(iX in tracerEmitter.emitted) {
-                Sys.println(switch(iX) {
-                    case AccumulatorAdd(dest, source):
-                    '${OpUtils.convToStr(dest)} += ${OpUtils.convToStr(source)}';
-                    case Assign(dest, src):
-                    '${OpUtils.convToStr(dest)} := ${OpUtils.convToStr(src)}';
-                });
-            }
+            Sys.println(PrgmUtils.convToStr(tracerEmitter.emitted));
         }
 
         { // gen code for a(I)*d(I,J)
@@ -136,7 +120,7 @@ class TestDyna {
 
             var tracerEmitter:TracerEmitter = new TracerEmitter();
             tracerEmitter.prgm = [
-                Term.AccumulatorAdd(
+                Term.Assign(Aggregation.ADD,
                     Op.Arr("c",[Op.ConstInt(0)]),
                     Op.MulArr([Op.Arr("a",[Op.Var("I")]), Op.Arr("d",[Op.Var("I"), Op.Var("J")])])
                 ),
@@ -148,14 +132,7 @@ class TestDyna {
             }
 
             // debug emitted program
-            for(iX in tracerEmitter.emitted) {
-                Sys.println(switch(iX) {
-                    case AccumulatorAdd(dest, source):
-                    '${OpUtils.convToStr(dest)} += ${OpUtils.convToStr(source)}';
-                    case Assign(dest, src):
-                    '${OpUtils.convToStr(dest)} := ${OpUtils.convToStr(src)}';
-                });
-            }
+            Sys.println(PrgmUtils.convToStr(tracerEmitter.emitted));
         }
 
         { // gen code for a(I)*d(I,I)
@@ -163,7 +140,7 @@ class TestDyna {
 
             var tracerEmitter:TracerEmitter = new TracerEmitter();
             tracerEmitter.prgm = [
-                Term.AccumulatorAdd(
+                Term.Assign(Aggregation.ADD,
                     Op.Arr("c",[Op.ConstInt(0)]),
                     Op.MulArr([Op.Arr("a",[Op.Var("I")]), Op.Arr("d",[Op.Var("I"), Op.Var("I")])])
                 ),
@@ -175,14 +152,7 @@ class TestDyna {
             }
 
             // debug emitted program
-            for(iX in tracerEmitter.emitted) {
-                Sys.println(switch(iX) {
-                    case AccumulatorAdd(dest, source):
-                    '${OpUtils.convToStr(dest)} += ${OpUtils.convToStr(source)}';
-                    case Assign(dest, src):
-                    '${OpUtils.convToStr(dest)} := ${OpUtils.convToStr(src)}';
-                });
-            }
+            Sys.println(PrgmUtils.convToStr(tracerEmitter.emitted));
         }
 
 
@@ -191,7 +161,7 @@ class TestDyna {
 
             var tracerEmitter:TracerEmitter = new TracerEmitter();
             tracerEmitter.prgm = [
-                Term.AccumulatorAdd(
+                Term.Assign(Aggregation.ADD,
                     Op.Arr("c",[Op.Var("J")]),
                     Op.MulArr([Op.Arr("a",[Op.Var("I")]), Op.Arr("d",[Op.Var("I"), Op.Var("J")])])
                 ),
@@ -203,21 +173,11 @@ class TestDyna {
             }
 
             // debug emitted program
-            for(iX in tracerEmitter.emitted) {
-                Sys.println(switch(iX) {
-                    case AccumulatorAdd(dest, source):
-                    '${OpUtils.convToStr(dest)} += ${OpUtils.convToStr(source)}';
-                    case Assign(dest, src):
-                    '${OpUtils.convToStr(dest)} := ${OpUtils.convToStr(src)}';
-                });
-            }
+            Sys.println(PrgmUtils.convToStr(tracerEmitter.emitted));
         }
 
 
 
-        //commented because we can soon describe it
-        //assigns.push( X.Assign(Op.Arr("r",0), Op.AddArr([Op.Arr("c", 0), Op.Arr("c", 1), Op.Arr("c", 2), Op.Arr("c", 3), Op.Arr("c", 4), Op.Arr("c", 5), Op.Arr("c", 6),Op.Arr("c", 7), Op.Arr("c", 8), ])) );
-        
 
 
         //var target = new ConvertDynaToCode();
@@ -275,7 +235,7 @@ class Unroller {
         var resArr:Array<Term> = [];
 
         switch(x) {
-            case Term.AccumulatorAdd(Op.Arr(arrNameDest, destIdxs), sourceOp):
+            case Term.Assign(aggr, Op.Arr(arrNameDest, destIdxs), sourceOp):
             
             // compute accessed (array) variables by variable name
             // ex: a(I)*b(I) -> I has array-vars [a, b]
@@ -399,7 +359,7 @@ class Unroller {
                     lefthandSide = replaceVar(lefthandSide, iAssigmentVarName, replaceOp);
                 }
                 
-                return Term.AccumulatorAdd(lefthandSide, righthandSide);
+                return Term.Assign(aggr, lefthandSide, righthandSide);
             }
             
             // instantiate body of Rule for each variable assignment
@@ -407,23 +367,7 @@ class Unroller {
                 resArr.push(instantiateBodyWithVarAssigment(iVarAssignment));
             }
 
-
-
-            case AccumulatorAdd(_,_):
-            throw "Not recognized!"; // TODO
-
-            /* TODO
-            case Assign(dest, src):
-
-            // compute accessed (array) variables by variable name
-            // ex: a(I)*b(I) -> I has array-vars [a, b]
-            var arrayVarsByVariable = new Map<String, Array<String>>();
-            retArrAccess(src, arrayVarsByVariable);
-
-            */
-
-
-            case Assign(_,_):
+            case Assign(_,_,_):
             resArr.push(x);
         }
 
@@ -565,7 +509,7 @@ class Executive {
     // executes assignment
     public static function execAssign(assign:Term, varFile:VarFile) {
         switch (assign) {
-            case Assign(dest, source):
+            case Assign(Aggregation.NONE, dest, source):
 
             var val = calc(source, varFile);
 
@@ -659,12 +603,13 @@ class Executive {
     }
 }
 
-// TODO< OpUtils to convert to string description >
-
+enum Aggregation {
+    NONE; // :=
+    ADD; // +=
+}
 
 enum Term {
-    AccumulatorAdd(dest:Op, source:Op); // ex: b(I) += a(I)
-    Assign(dest:Op, source:Op); // assignment: ex: b(0) := a(0)
+    Assign(aggr:Aggregation, dest:Op, source:Op); // assignment: ex: b(0) := a(0).   or   b(0) += 5.
 }
 
 // TODO< rename to Expr >
@@ -1015,5 +960,20 @@ class VarAssigment {
     // helper to compute unique key to identify this assignment
     public function calcKey():String {
         return [for (iName in assignments.keys()) '$iName#${assignments.get(iName)}'].join("#");
+    }
+}
+
+// tool to print program to console
+class PrgmUtils {
+    public static function convToStr(prgm:Array<Term>): String {
+        return [
+            for(iTerm in prgm) {
+                switch(iTerm) {
+                    case Assign(Aggregation.ADD, dest, source):
+                    '${OpUtils.convToStr(dest)} += ${OpUtils.convToStr(source)}';
+                    case Term.Assign(Aggregation.NONE, dest, src):
+                    '${OpUtils.convToStr(dest)} := ${OpUtils.convToStr(src)}';
+                };
+            }].join("\n");
     }
 }
