@@ -394,6 +394,9 @@ class Unroller {
 
             case Assign(_,_,_):
             resArr.push(x);
+
+            case Equal(head, body):
+            throw "TODO"; // need to implement/remember it
         }
 
         return resArr;
@@ -636,6 +639,7 @@ enum Aggregation {
 }
 
 enum Term {
+    Equal(head:Op, body:Op); // equal, to define something, ex: add1(X) = X+1.
     Assign(aggr:Aggregation, dest:Op, source:Op); // assignment: ex: b(0) := a(0).   or   b(0) += 5.
 }
 
@@ -1002,6 +1006,8 @@ class PrgmUtils {
                     '${OpUtils.convToStr(dest)} min= ${OpUtils.convToStr(source)}';
                     case Assign(Aggregation.MAX, dest, source):
                     '${OpUtils.convToStr(dest)} max= ${OpUtils.convToStr(source)}';
+                    case Equal(head, body):
+                    '${OpUtils.convToStr(head)} = ${OpUtils.convToStr(body)}';
                     
                 };
             }].join("\n");
