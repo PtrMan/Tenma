@@ -58,6 +58,8 @@
 
 // TODO SCIFI< implement lexer and parser >
 
+package dyna;
+
 class Dyna {
     public static function main() {
         UnittestUnroller.testOneVars2();
