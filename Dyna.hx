@@ -7,6 +7,8 @@
 // * only supports
 //   += aggregation
 //   := assignment
+//   min= aggregation
+//   max= aggregation
 // * only supports  sqrt(X), exp(X), abs(X), pow(X, Y)  functions
 // * only supports variable constraints:
 //      ex:
@@ -17,7 +19,8 @@
 //   support variable constraints
 //      ex:
 //         a(0) += b(I,I)
-
+// 
+// * interpreter can't use variables (program has to get processed with forward inference before interpretation)
 
 
 // TODO< unittest assignConstraint() >
@@ -50,12 +53,9 @@
 //    natural(=I+1) |= natural(I).
 //    from https://web.archive.org/web/20170315003048/http://dyna.org/wiki/index.php/Examples#Factorial
 
-// TODO LATER< support min= aggregate >
-// TODO LATER< support max= aggregate >
-
 // TODO SCIFI< implement lexer and parser >
 
-class TestDyna {
+class Dyna {
     public static function main() {
         UnittestUnroller.testOneVars2();
         UnittestUnroller.testTwoVars();
@@ -66,7 +66,7 @@ class TestDyna {
         varFile.vars.set("d", ArrObj.create2([[0.11, 0.9], [0.11, 0.9]]));
 
         varFile.vars.set("x", ArrObj.create([0.3]));
-
+        varFile.vars.set("y", ArrObj.create([0.3, 0.1, 0.2]));
 
 
 
@@ -177,6 +177,26 @@ class TestDyna {
         }
 
 
+        { // program with complex activation function
+            trace('-----');
+
+            var ePow2x = Op.FnCall("exp", [Op.MulArr([Op.ConstFloat(2.0), Op.Arr("y", [Op.Var("I")])])]);
+
+            var prgm = [
+                Term.Assign(Aggregation.NONE,Op.Arr("l",[Op.Var("I")]),   Op.Div(Op.AddArr([ePow2x, Op.ConstFloat(-1.0)]), Op.AddArr([ePow2x, Op.ConstFloat(1.0)]))), // l(i) := (e^(2x) - 1)/(e^(2x) + 1)
+            ];
+
+            var tracerEmitter:TracerEmitter = new TracerEmitter();
+            tracerEmitter.prgm = prgm;
+            tracerEmitter.varFile = varFile;
+            tracerEmitter.reopen();
+
+            while(!tracerEmitter.traceStep()) { // trace until program terminates
+            }
+
+            // debug emitted program
+            Sys.println(PrgmUtils.convToStr(tracerEmitter.emitted));
+        }
 
 
 
@@ -242,7 +262,7 @@ class Unroller {
             var arrayVarsByVariable = new Map<String, Array<String>>();
             retArrAccess(sourceOp, arrayVarsByVariable);
 
-            { // debug content of arrayVarsByVariable
+            if(false) { // debug content of arrayVarsByVariable
                 for(iKey in arrayVarsByVariable.keys()) {
                     var varNames = arrayVarsByVariable[iKey];
                     trace('$iKey : $varNames');
@@ -606,6 +626,8 @@ class Executive {
 enum Aggregation {
     NONE; // :=
     ADD; // +=
+    MIN; // min=
+    MAX; // max=
 }
 
 enum Term {
@@ -781,8 +803,6 @@ class FnConstraintSolver {
 
             varAssignment;
         }];
-
-        trace(varAssignments.length);
         return varAssignments;
     }
 }
@@ -973,6 +993,11 @@ class PrgmUtils {
                     '${OpUtils.convToStr(dest)} += ${OpUtils.convToStr(source)}';
                     case Term.Assign(Aggregation.NONE, dest, src):
                     '${OpUtils.convToStr(dest)} := ${OpUtils.convToStr(src)}';
+                    case Assign(Aggregation.MIN, dest, source):
+                    '${OpUtils.convToStr(dest)} min= ${OpUtils.convToStr(source)}';
+                    case Assign(Aggregation.MAX, dest, source):
+                    '${OpUtils.convToStr(dest)} max= ${OpUtils.convToStr(source)}';
+                    
                 };
             }].join("\n");
     }
