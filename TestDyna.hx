@@ -6,8 +6,6 @@
 //   Implies that no backward queries are implemented at all.
 // * only supports
 //   += aggregation
-//     * only with left hand side where constants are used
-//       ex: c(0) := ...
 //   := assignment
 //     * only with left hand side where constants are used
 //       ex: c(0) := ...
@@ -29,10 +27,6 @@
 
 
 
-// TODO< handle variable in head, ex >
-// c(I) += a(I,J) * b(J)
-
-
 // TODO< handle two variable with assignment, ex >
 // c(I) := a(I,J) * b(J)
 
@@ -42,8 +36,6 @@
 
 
 // TODO< track open instructions in tracer correctly >
-
-// TODO< handle two variables in codegen >
 
 
 
@@ -194,6 +186,34 @@ class TestDyna {
         }
 
 
+        { // gen code for c(J) += a(I)*d(I,J)
+            trace('-----');
+
+            var tracerEmitter:TracerEmitter = new TracerEmitter();
+            tracerEmitter.prgm = [
+                Term.AccumulatorAdd(
+                    Op.Arr("c",[Op.Var("J")]),
+                    Op.MulArr([Op.Arr("a",[Op.Var("I")]), Op.Arr("d",[Op.Var("I"), Op.Var("J")])])
+                ),
+            ];
+            tracerEmitter.varFile = varFile;
+            tracerEmitter.reopen();
+
+            while(!tracerEmitter.traceStep()) { // trace until program terminates
+            }
+
+            // debug emitted program
+            for(iX in tracerEmitter.emitted) {
+                Sys.println(switch(iX) {
+                    case AccumulatorAdd(dest, source):
+                    '${OpUtils.convToStr(dest)} += ${OpUtils.convToStr(source)}';
+                    case Assign(dest, src):
+                    '${OpUtils.convToStr(dest)} := ${OpUtils.convToStr(src)}';
+                });
+            }
+        }
+
+
 
         //commented because we can soon describe it
         //assigns.push( X.Assign(Op.Arr("r",0), Op.AddArr([Op.Arr("c", 0), Op.Arr("c", 1), Op.Arr("c", 2), Op.Arr("c", 3), Op.Arr("c", 4), Op.Arr("c", 5), Op.Arr("c", 6),Op.Arr("c", 7), Op.Arr("c", 8), ])) );
@@ -255,9 +275,7 @@ class Unroller {
         var resArr:Array<Term> = [];
 
         switch(x) {
-            case Term.AccumulatorAdd(
-                Op.Arr(arrNameDest, [Op.ConstInt(arrIdxDest)]),
-                sourceOp/*Op.Arr(arrNameSource, Op.Var(arrVarSource))*/):
+            case Term.AccumulatorAdd(Op.Arr(arrNameDest, destIdxs), sourceOp):
             
             // compute accessed (array) variables by variable name
             // ex: a(I)*b(I) -> I has array-vars [a, b]
@@ -366,16 +384,22 @@ class Unroller {
             function instantiateBodyWithVarAssigment(varAssignment:VarAssigment):Term {
                 var righthandSide:Op = sourceOp;
                 
+                // replace vars of righthandside
                 for (iAssigmentVarName in varAssignment.assignments.keys()) {
                     var assignedIndex:Int = varAssignment.assignments.get(iAssigmentVarName); // the assigned index for the variable
                     var replaceOp:Op = Op.ConstInt(assignedIndex);// Op with which we substitute it
                     righthandSide = replaceVar(righthandSide, iAssigmentVarName, replaceOp);
                 }
+
+                // replace vars of lefthandside
+                var lefthandSide:Op = Op.Arr(arrNameDest, destIdxs);
+                for (iAssigmentVarName in varAssignment.assignments.keys()) {
+                    var assignedIndex:Int = varAssignment.assignments.get(iAssigmentVarName); // the assigned index for the variable
+                    var replaceOp:Op = Op.ConstInt(assignedIndex);// Op with which we substitute it
+                    lefthandSide = replaceVar(lefthandSide, iAssigmentVarName, replaceOp);
+                }
                 
-                return
-                    Term.AccumulatorAdd(
-                        Op.Arr(arrNameDest, [Op.ConstInt(arrIdxDest)]),
-                        righthandSide);
+                return Term.AccumulatorAdd(lefthandSide, righthandSide);
             }
             
             // instantiate body of Rule for each variable assignment
