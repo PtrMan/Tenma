@@ -113,7 +113,7 @@ class Dyna {
             tracerEmitter.varFile = varFile;
             tracerEmitter.reopen();
 
-            while(!tracerEmitter.traceStep()) { // trace until program terminates
+            while(tracerEmitter.traceStep()) { // trace until program terminates
             }
 
             // debug emitted program
@@ -133,7 +133,7 @@ class Dyna {
             tracerEmitter.varFile = varFile;
             tracerEmitter.reopen();
 
-            while(!tracerEmitter.traceStep()) { // trace until program terminates
+            while(tracerEmitter.traceStep()) { // trace until program terminates
             }
 
             // debug emitted program
@@ -153,7 +153,7 @@ class Dyna {
             tracerEmitter.varFile = varFile;
             tracerEmitter.reopen();
 
-            while(!tracerEmitter.traceStep()) { // trace until program terminates
+            while(tracerEmitter.traceStep()) { // trace until program terminates
             }
 
             // debug emitted program
@@ -174,7 +174,7 @@ class Dyna {
             tracerEmitter.varFile = varFile;
             tracerEmitter.reopen();
 
-            while(!tracerEmitter.traceStep()) { // trace until program terminates
+            while(tracerEmitter.traceStep()) { // trace until program terminates
             }
 
             // debug emitted program
@@ -196,7 +196,7 @@ class Dyna {
             tracerEmitter.varFile = varFile;
             tracerEmitter.reopen();
 
-            while(!tracerEmitter.traceStep()) { // trace until program terminates
+            while(tracerEmitter.traceStep()) { // trace until program terminates
             }
 
             // debug emitted program
