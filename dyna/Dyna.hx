@@ -5,6 +5,8 @@
 // * supports equal assignments of functions:
 //      ex: add1(X) = X+1.
 // * supports dense and sparse arrays
+//
+// * interpreter only supports  sqrt(X), exp(X), abs(X), pow(X, Y), sin(X), cos(X), min(X, Y), max(X, Y)  functions
 
 // limitations
 // * only supports forward inference.
@@ -14,7 +16,6 @@
 //   := assignment
 //   min= aggregation
 //   max= aggregation
-// * only supports  sqrt(X), exp(X), abs(X), pow(X, Y)  functions
 // * only supports variable constraints:
 //      ex:
 //         a(0) += b(I,J)
@@ -817,6 +818,14 @@ class Executive {
             return Math.abs(calc(arg, varFile));
             case FnCall("pow",[arg0,arg1]):
             return Math.pow(calc(arg0, varFile),calc(arg1, varFile));
+            case FnCall("cos",[arg]):
+            return Math.cos(calc(arg, varFile));
+            case FnCall("sin",[arg]):
+            return Math.sin(calc(arg, varFile));
+            case FnCall("min",[arg0,arg1]):
+            return Math.min(calc(arg0, varFile),calc(arg1, varFile));
+            case FnCall("max",[arg0,arg1]):
+            return Math.max(calc(arg0, varFile),calc(arg1, varFile));
 
             case UnaryNeg(arg):
             return -calc(arg, varFile);
