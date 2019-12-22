@@ -23,6 +23,11 @@
 //   support variable constraints
 //      ex:
 //         a(0) += b(I,I)
+// * function with equal (=) only support variables
+//   doesn't support
+//   a(0) = 5
+//   a(1) = 7
+// 
 // 
 // * interpreter can't use variables (program has to get processed with forward inference before interpretation)
 
