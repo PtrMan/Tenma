@@ -4,6 +4,7 @@
 // features
 // * supports equal assignments of functions:
 //      ex: add1(X) = X+1.
+// * supports dense and sparse arrays
 
 // limitations
 // * only supports forward inference.
@@ -1058,7 +1059,7 @@ class FnConstraintSolver {
     }
 
     public static function assignConstraintInternal(indexConstraints:Array<Op>, arr:ArrObj): Array<VarAssigment> {        
-        if (indexConstraints.length != arr.width) {
+        if (indexConstraints.length != arr.dim) {
             trace('internal error: expect same length');
             return [];
         }
@@ -1185,37 +1186,72 @@ class ArrObj {
     // keys are strings of indices
     public var map:Map<String, Float> = new Map<String, Float>();
 
-    public var width:Int;
+    public var dense:Array<Float> = null; // is sparse if this is null
 
-    public function new(width) {
-        this.width=width;
+    public var width:Int = 0; // width of 2d array
+
+    public var dim:Int; // dimensions
+
+    public function new(dim) {
+        this.dim=dim;
+    }
+
+    public function isDense() {
+        return dense != null;
+    }
+
+    public function denseAt2(y:Int,x:Int):Float {
+        return dense[width*y + x];
+    }
+
+    public function denseSetAt2(y:Int,x:Int,v:Float) {
+        dense[width*y + x] = v;
     }
 
     // helper to return all possible indices
     public function retIndices(): Array<Array<Int>> {
         var res:Array<Array<Int>> = [];
 
-        for(iKey in map.keys()) {
-            res.push(iKey.split("_").map(v -> Std.parseInt(v))); // split by "_" because we seperate indices with it
+        if (isDense()) {
+            if (dim == 1) {
+                res = [for (idx in 0...dense.length) [idx]]; // build array with all one dimensional indices
+            }
+            else if (dim == 2) {
+                // build cartesian product of all dimension indices
+                for (i in 0...Std.int(dense.length/width)) {
+                    for (j in 0...width) {
+                        res.push([i, j]);
+                    }
+                }
+            }
+            else {
+                throw 'Not implemented for more than 2 dimensions!';
+            }
+        }
+        else {
+            for(iKey in map.keys()) {
+                res.push(iKey.split("_").map(v -> Std.parseInt(v))); // split by "_" because we seperate indices with it
+            }
         }
 
         return res;
     }
 
+    // create dense array
     public static function create(arr:Array<Float>): ArrObj {
         var res = new ArrObj(1);
-        for(iIdx in 0...arr.length) {
-            res.map.set('$iIdx', arr[iIdx]);
-        }
+        res.dense = [for (iv in arr) iv]; // copy
         return res;
     }
 
-    // create two dimensional
+    // create two dimensional dense array
     public static function create2(arr:Array<Array<Float>>): ArrObj {
         var res = new ArrObj(2);
+        res.width = arr[0].length;
+        res.dense = [for (i in 0...arr[0].length*arr.length) 0.0];
         for(iIdx in 0...arr.length) {
             for(jIdx in 0...arr[iIdx].length) {
-                res.map.set('${iIdx}_$jIdx', arr[iIdx][jIdx]);
+                res.denseSetAt2(iIdx, jIdx, arr[iIdx][jIdx]);
             }
         }
         return res;
