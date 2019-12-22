@@ -559,7 +559,10 @@ class Unroller {
             }
 
             case Assign(_,_,_):
-            resArr.push(term);
+            resArr.push(term); // just emit it as output
+
+            case Impl(_,_):
+            resArr.push(term); // just emit it as output
 
             case Equal(head, body):
             fnDefs.push(term); // is function definition - just remember it
@@ -852,6 +855,7 @@ enum Term {
     // body is always a conjuction of Op's (which is called term in the literatur of Dyna)
     Equal(head:Op, body:Array<Op>); // equal, to define something, ex: add1(X) = X+1.
     Assign(aggr:Aggregation, head:Op, body:Array<Op>); // assignment: ex: b(0) := a(0).   or   b(0) += 5.
+    Impl(head:Op, body:Array<Op>); // implication from datalog, ex:  a :- c.
 }
 
 // TODO< rename to Expr >
@@ -1325,6 +1329,9 @@ class PrgmUtils {
 
                     case Equal(head, bodyConj):
                     '${OpUtils.convToStr(head)} = ${bodyConj.map(iTerm -> OpUtils.convToStr(iTerm)).join(", ")}.';
+
+                    case Impl(head, bodyConj):
+                    '${OpUtils.convToStr(head)} :- ${bodyConj.map(iTerm -> OpUtils.convToStr(iTerm)).join(", ")}.';
                 };
             }].join("\n");
     }
