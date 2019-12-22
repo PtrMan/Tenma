@@ -763,9 +763,9 @@ class Executive {
             case ConstInt(val):
             return val;
 
-            case Arr(name, idxs):
-            {
-                var indices:Array<Int> = idxs.map(iIdx -> Std.int(calc(iIdx, varFile))); // compute concrete indices
+            case Arr(name, args):
+            { // it is a array access
+                var indices:Array<Int> = args.map(iIdx -> Std.int(calc(iIdx, varFile))); // compute concrete indices
 
                 trace('read $name(${indices.map(v -> '$v').join(", ")})');
                 var idxStrKey:String = indices.map(v -> '$v').join("_"); // convert index to string key
