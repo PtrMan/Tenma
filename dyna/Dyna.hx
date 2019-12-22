@@ -402,40 +402,46 @@ class Unroller {
         return resArr;
     }
 
-    // helper
-    // replaces a variable with a actual value(index)
-    private static function replaceVar(op:Op, varname:String, replace:Op): Op {
-        switch(op) {
-            case Var(name) if (name==varname):
-            return replace; // replace
+    // substitutes a Op search with replacement
+    public static function subst(op:Op, search:Op, replacement:Op): Op {
+        if (OpUtils.eq(op, search)) {
+            return replacement;
+        }
 
+        switch(op) {
             case Arr(name, idxs):
             {
-                var substIdxs = idxs.map(iIdx -> replaceVar(iIdx, varname, replace));
+                var substIdxs = idxs.map(iIdx -> subst(iIdx, search, replacement));
                 return Arr(name, substIdxs);
             }
 
             case AddArr(args):
-            return AddArr(args.map(iArg -> replaceVar(iArg, varname, replace)));
+            return AddArr(args.map(iArg -> subst(iArg, search, replacement)));
 
             case MulArr(args):
-            return MulArr(args.map(iArg -> replaceVar(iArg, varname, replace)));
+            return MulArr(args.map(iArg -> subst(iArg, search, replacement)));
 
             case Div(arg0, arg1):
-            return Div(replaceVar(arg0, varname, replace), replaceVar(arg1, varname, replace));
+            return Div(subst(arg0, search, replacement), subst(arg1, search, replacement));
 
             case FnCall(name, args):
-            return FnCall(name, args.map(iArg -> replaceVar(iArg, varname, replace)));
+            return FnCall(name, args.map(iArg -> subst(iArg, search, replacement)));
 
             case UnaryNeg(arg):
-            return UnaryNeg(replaceVar(arg, varname, replace));
+            return UnaryNeg(subst(arg, search, replacement));
 
             case Trinary(cond, truePath, falsePath):
-            return Trinary(replaceVar(cond, varname, replace), replaceVar(truePath, varname, replace), replaceVar(falsePath, varname, replace));
+            return Trinary(subst(cond, search, replacement), subst(truePath, search, replacement), subst(falsePath, search, replacement));
 
             case _:
             return op; // return without any change for all others
         }
+    }
+
+    // helper
+    // replaces a variable with a actual value(index)
+    private static function replaceVar(op:Op, varname:String, replacement:Op): Op {
+        return subst(op, Var(varname), replacement);
     }
 
     // public for unittesting
@@ -648,7 +654,7 @@ enum Op {
     Var(name:String); // variable access, ex: a(I), where I is the variable
     ConstFloat(val:Float);
     ConstInt(val:Int);
-    Arr(name:String, idxs:Array<Op>); // array access, indices are for each dimension
+    Arr(name:String, args:Array<Op>); // array access, indices are for each dimension
     AddArr(args: Array<Op>);
     MulArr(args: Array<Op>);
     Div(arg0:Op, arg1:Op);
@@ -664,6 +670,86 @@ enum Op {
 }
 
 class OpUtils {
+    public static function eq(a:Op, b:Op): Bool {
+        return switch(a) {
+            case Var(name):
+            switch(b) {
+                case Var(nameb) if(name==nameb): true;
+                case _:false;
+            }
+            case ConstFloat(val):
+            switch(b) {
+                case ConstFloat(valb) if(val==valb): true; // TODO< compare with epsilon >
+                case _:false;
+            }
+            case ConstInt(val):
+            switch(b) {
+                case ConstInt(valb) if(val==valb): true;
+                case _:false;
+            }
+            case Arr(name, args):
+            switch(b) {
+                case Arr(nameb, argsb) if(name==nameb&&args.length==argsb.length):
+                for(idx in 0...args.length) {
+                    if (!eq(args[idx],argsb[idx]))  return false;
+                }
+                true;
+                case _:false;
+            }
+            case AddArr(args):
+            switch(b) {
+                case AddArr(argsb) if(args.length==argsb.length):
+                for(idx in 0...args.length) {
+                    if (!eq(args[idx],argsb[idx]))  return false;
+                }
+                true;
+                case _:false;
+            }
+            case MulArr(args):
+            switch(b) {
+                case MulArr(argsb) if(args.length==argsb.length):
+                for(idx in 0...args.length) {
+                    if (!eq(args[idx],argsb[idx]))  return false;
+                }
+                true;
+                case _:false;
+            }
+            case Div(arg0, arg1):
+            switch(b) {
+                case Div(arg0b,arg1b) if (eq(arg0,arg0b)&&eq(arg1,arg1b)): true;
+                case _:false;
+            }
+
+            case FnCall(name, args):
+            switch(b) {
+                case FnCall(nameb,argsb) if(name==nameb&&args.length==argsb.length):
+                for(idx in 0...args.length) {
+                    if (!eq(args[idx],argsb[idx]))  return false;
+                }
+                true;
+                case _:false;
+            }
+
+            case UnaryNeg(arg):
+            switch(b) {
+                case UnaryNeg(argb) if (eq(arg,argb)):true;
+                case _:false;
+            }
+
+            case Trinary(cond, truePath, falsePath):
+            switch(b) {
+                case Trinary(condB, truePathB, falsePathB) if(eq(cond, condB) && eq(truePath, truePathB) && eq(falsePath, falsePathB)): true;
+                case _: false;
+            }
+
+            case TempVal(name):
+            switch(b) {
+                case TempVal(nameb) if(name==nameb): true;
+                case _: false;
+            }
+        }
+    }
+
     public static function convToStr(op:Op): String {
         switch(op) {
             case Var(name):
