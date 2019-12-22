@@ -1,6 +1,10 @@
 // my own small Dyna inspired implementation
 // tailored toward ML'ish puropses
 
+// features
+// * supports equal assignments of functions:
+//      ex: add1(X) = X+1.
+
 // limitations
 // * only supports forward inference.
 //   Implies that no backward queries are implemented at all.
@@ -95,7 +99,7 @@ class Dyna {
                 Op.Arr("a",[Op.Var("I")])
             );
 
-            assigns = assigns.concat(Unroller.unroll(as2, varFile));
+            assigns = assigns.concat(new Unroller().unroll(as2, varFile));
         }
 
         Sys.println(PrgmUtils.convToStr(assigns));
@@ -182,6 +186,30 @@ class Dyna {
         }
 
 
+
+        { // gen code for sqrtP2(X) = sqrt(X*2).   c(I) += sqrtP2(a(I)).
+            trace('-----');
+
+            var tracerEmitter:TracerEmitter = new TracerEmitter();
+            tracerEmitter.prgm = [
+                Term.Equal(Op.Arr("sqrtP2",[Op.Var("X")]), Op.FnCall("sqrt", [Op.MulArr([Op.Var("X"), Op.ConstFloat(2.0)])])),
+
+                Term.Assign(Aggregation.ADD,
+                    Op.Arr("c",[Op.Var("I")]),
+                    Op.MulArr([Op.Arr("sqrtP2",[Op.Arr("a",[Op.Var("I")])])])
+                ),
+            ];
+            tracerEmitter.varFile = varFile;
+            tracerEmitter.reopen();
+
+            while(tracerEmitter.traceStep()) { // trace until program terminates
+            }
+
+            // debug emitted program
+            Sys.println(PrgmUtils.convToStr(tracerEmitter.emitted));
+        }
+
+
         { // program with complex activation function
             trace('-----');
 
@@ -202,6 +230,7 @@ class Dyna {
             // debug emitted program
             Sys.println(PrgmUtils.convToStr(tracerEmitter.emitted));
         }
+
 
 
 
@@ -256,16 +285,172 @@ class UnittestUnroller {
 
 // unrolls a(0) += b(J)  to a(0) += b(0), a(0) += b(1), etc.
 class Unroller {
-    public static function unroll(x:Term, varFile:VarFile):Array<Term> {
+    public var uniqueVarCounter = 0; // used to enumerate unique variable names
+
+    public var fnDefs: Array<Term> = []; // user defined function defs in Dyna program
+                                         // functions are assigned with "="(equal) symbol
+                                         // contains whole function definitions
+
+    public function new() {}
+
+    // looks up a user-defined function by name and number of args
+    // returns null if no function was found
+    public function lookupUserDefFn(name:String, nArgs:Int): Term {
+        for (iFnDef in fnDefs) {
+            switch(iFnDef) {
+                case Equal(Arr(iFnName, iArgs), _):
+                if (iFnName == name && iArgs.length == nArgs) {
+                    return iFnDef; // found
+                }
+                case _:
+                trace("soft internal error - expected equal as fn-def");
+            }
+        }
+        return null; // nothing found
+    }
+
+    // expects a Assign(=) term and replaces all vars by unique substituions by the vars in the head
+    // public for testing
+    public function substFnWithUniqueVarnames(term:Term): Term {
+        switch(term) {
+            case Equal(head, body):
+            switch(head) {
+                case Arr(headArrName, headArgs):
+
+                // we need to replace all vars in head with unique new vars
+                var substHead:Op = head; // substituded head
+                var substBody:Op = body; // substituded body
+
+                for(iHeadArg in headArgs) { // loop to substitude each var with a unique var in head and body
+                    switch(iHeadArg) {
+                        case Var(iVarName):
+                        var uniqueVarName:String = '|${uniqueVarCounter++}'; // need to gen unique var-name
+                        substHead = subst(substHead, Var(iVarName), Var(uniqueVarName)); // substitude
+                        substBody = subst(substBody, Var(iVarName), Var(uniqueVarName)); // substitude
+                        case _:
+                    }
+                }
+
+                return Equal(substHead,substBody);
+
+                case _:
+                throw "Expected Arr as head   ex: a(I)";
+            }
+
+            case _:
+            throw "Internal Error - expected Equal"; // is a internal error because something gone horibly wrong
+        }
+    }
+
+    // TODO< move into utils of Op >
+    // substitue by calling function
+    // calls a function for all recursivly ops, recursion terminates (for the branch) when function returns false as the recur value
+    public static function substByFn(term:Op, fn:(Op)->{res:Op, recur:Bool}): Op {
+        var callee:{res:Op, recur:Bool} = fn(term);
+        var res = callee.res;
+        if (callee.recur) {
+            res = switch (callee.res) {
+                case Var(name): callee.res;
+                case ConstFloat(val): callee.res;
+                case ConstInt(val): callee.res;
+                
+                case Arr(arrName, args):
+                Arr(arrName, [for(iArg in args) substByFn(iArg, fn)]);
+                
+                case AddArr(args):
+                AddArr([for(iArg in args) substByFn(iArg, fn)]);
+
+                case MulArr(args):
+                MulArr([for(iArg in args) substByFn(iArg, fn)]);
+
+                case Div(arg0, arg1):
+                Div(substByFn(arg0, fn), substByFn(arg1, fn));
+
+                case FnCall(name, args):
+                FnCall(name, [for(iArg in args) substByFn(iArg, fn)]);
+
+                case UnaryNeg(arg):
+                UnaryNeg(substByFn(arg, fn));
+
+                case Trinary(cond, truePath, falsePath):
+                Trinary(
+                    substByFn(cond, fn),
+                    substByFn(truePath, fn),
+                    substByFn(falsePath, fn)
+                );
+                
+                case TempVal(name): callee.res;
+            }
+        }
+        return res;
+    }
+
+    // substitudes all arr-accesses by the known function body for all known functions
+    public function substFnDefsByBody(op:Op): Op {
+        // function to substitute and decide if the subst process continues recursivly
+        function recurSubstFn(op:Op): {res:Op, recur:Bool} {
+            switch(op) {
+                case Arr(headArrName, headArgs):
+
+                // * now we need to lookup if we know any function with the headArrName
+                var fn:Term = lookupUserDefFn(headArrName, headArgs.length);
+                if (fn == null) { // was no function found with the name and arguments?
+                    return {res:op, recur:true}; // continue recursivly
+                }
+
+                // * now we need to replace all vars in fn with unique vars
+                fn = substFnWithUniqueVarnames(fn);
+
+                // we have to replace the arr by the body of the function with correctly substituded parameters in the head
+                {
+                    var rewriteFnBody: Op = null; // function body which we are rewriting
+
+                    switch(fn) {
+                        case Equal(Arr(_, fnHeadArgs), fnBody):
+
+                        rewriteFnBody = fnBody; // current rewrite of the fn body is the current fn body
+
+                        for(iArgIdx in 0...headArgs.length) { // iterate over all args of the fn invocation
+                            // lookup argument in head headArgs and rewrite fn body with var as looked up by fnHeadArgs
+                            var iCalleeHeadArg:Op = fnHeadArgs[iArgIdx];
+                            var iCallerHeadArg:Op = headArgs[iArgIdx];
+
+                            //trace('rewrite');
+                            //trace('   ${OpUtils.convToStr(rewriteFnBody)}');
+                            //trace('   ${OpUtils.convToStr(iCalleeHeadArg)}');
+                            //trace('   ${OpUtils.convToStr(iCallerHeadArg)}');
+                            rewriteFnBody = subst(rewriteFnBody, iCalleeHeadArg, iCallerHeadArg);
+                            //trace('|-');
+                            //trace('   ${OpUtils.convToStr(rewriteFnBody)}');
+                        }
+
+                        case _:
+                        throw "Internal Error - expected Equal"; // is a internal error because something gone horibly wrong
+                    }
+
+                    return {res:rewriteFnBody, recur:false}; // we don't want to process it recursivly
+                }
+
+                case _:
+                return {res:op, recur:true}; // continue with recursion
+            }
+        }
+        
+        return substByFn(op, recurSubstFn); // do recursive replacement process
+    }
+
+    public function unroll(term:Term, varFile:VarFile):Array<Term> {
         var resArr:Array<Term> = [];
 
-        switch(x) {
-            case Term.Assign(aggr, Op.Arr(arrNameDest, destIdxs), sourceOp):
+        switch(term) {
+            case Term.Assign(aggr, Op.Arr(arrNameDest, destIdxs), body):
             
+            var body2:Op = substFnDefsByBody(body); // body2 is the body after "inlineing" of function definitions
+
             // compute accessed (array) variables by variable name
             // ex: a(I)*b(I) -> I has array-vars [a, b]
             var arrayVarsByVariable = new Map<String, Array<String>>();
-            retArrAccess(sourceOp, arrayVarsByVariable);
+            retArrAccess(body2, arrayVarsByVariable);
 
             if(false) { // debug content of arrayVarsByVariable
                 for(iKey in arrayVarsByVariable.keys()) {
@@ -328,7 +513,7 @@ class Unroller {
                 return accesses;
             }
             
-            var ruleAccesses:Array<{rule:String, params:Array<Op>}> = retRuleAccesses(sourceOp);
+            var ruleAccesses:Array<{rule:String, params:Array<Op>}> = retRuleAccesses(body2);
 
             var commonVarAssignments: Array<VarAssigment> = []; // constraints which are common between all used rules
             { // compute common constraints
@@ -367,7 +552,7 @@ class Unroller {
 
 
             function instantiateBodyWithVarAssigment(varAssignment:VarAssigment):Term {
-                var righthandSide:Op = sourceOp;
+                var righthandSide:Op = body2;
                 
                 // replace vars of righthandside
                 for (iAssigmentVarName in varAssignment.assignments.keys()) {
@@ -393,10 +578,10 @@ class Unroller {
             }
 
             case Assign(_,_,_):
-            resArr.push(x);
+            resArr.push(term);
 
             case Equal(head, body):
-            throw "TODO"; // need to implement/remember it
+            fnDefs.push(term); // is function definition - just remember it
         }
 
         return resArr;
@@ -813,6 +998,8 @@ class TracerEmitter {
 
     public var varFile:VarFile; // used varibale file
 
+    private var unroller:Unroller = new Unroller(); // used unroller
+
     public function new() {}
 
     // puts all instructions into open set
@@ -833,7 +1020,7 @@ class TracerEmitter {
         open = open.slice(1, open.length); // remove first open
         
         var term:Term = prgm[currentOpen]; // fetch term
-        emitted = emitted.concat(Unroller.unroll(term, varFile)); // emit execution
+        emitted = emitted.concat(unroller.unroll(term, varFile)); // emit execution
 
         return true; // continue
     }
