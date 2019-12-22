@@ -69,12 +69,12 @@ class Dyna {
 
 
         // sigmoid activation
-        // l(0) := 1.0/(1.0 + exp(-x(0)))
-        var as1 = Term.Assign(Aggregation.NONE,Op.Arr("l",[Op.ConstInt(0)]),   Op.Div(Op.ConstFloat(1.0), Op.AddArr([Op.ConstFloat(1.0), Op.Arr("exp", [Op.UnaryNeg(Op.Arr("x", [Op.ConstInt(0)]))])]) ));
+        // l(0) := 1.0/(1.0 + exp(-x(0))).
+        var as1 = Term.Assign(Aggregation.NONE,Op.Arr("l",[Op.ConstInt(0)]),   [Op.Div(Op.ConstFloat(1.0), Op.AddArr([Op.ConstFloat(1.0), Op.Arr("exp", [Op.UnaryNeg(Op.Arr("x", [Op.ConstInt(0)]))])]) )]);
         Executive.execAssign(as1, varFile);
 
-        // c(0) := a(0)*b(0) + l(0)
-        var as0 = Term.Assign(Aggregation.NONE,Op.Arr("c",[Op.ConstInt(0)]), Op.AddArr([Op.MulArr([Op.Arr("a", [Op.ConstInt(0)]), Op.Arr("b", [Op.ConstInt(0)])]), Op.Arr("l", [Op.ConstInt(0)])]));
+        // c(0) := a(0)*b(0) + l(0).
+        var as0 = Term.Assign(Aggregation.NONE,Op.Arr("c",[Op.ConstInt(0)]),   [Op.AddArr([Op.MulArr([Op.Arr("a", [Op.ConstInt(0)]), Op.Arr("b", [Op.ConstInt(0)])]), Op.Arr("l", [Op.ConstInt(0)])])]);
         Executive.execAssign(as0, varFile);
 
         trace(varFile.vars.get("l").map.get("0"));
@@ -85,7 +85,7 @@ class Dyna {
         { // test "unroll" mechanism
             var as2 = Term.Assign(Aggregation.ADD,
                 Op.Arr("c",[Op.ConstInt(0)]),
-                Op.Arr("a",[Op.Var("I")])
+                [Op.Arr("a",[Op.Var("I")])]
             );
 
             assigns = assigns.concat(new Unroller().unroll(as2, varFile));
@@ -95,14 +95,14 @@ class Dyna {
 
 
         
-        { // gen code for a(I)*b(I)
+        { // gen code for c(0) += a(I)*b(I).
             trace('-----');
 
             var tracerEmitter:LinearStrategy = new LinearStrategy();
             tracerEmitter.prgm = [
                 Term.Assign(Aggregation.ADD,
                     Op.Arr("c",[Op.ConstInt(0)]),
-                    Op.MulArr([Op.Arr("a",[Op.Var("I")]), Op.Arr("b",[Op.Var("I")])])
+                    [Op.MulArr([Op.Arr("a",[Op.Var("I")]), Op.Arr("b",[Op.Var("I")])])]
                 ),
             ];
             tracerEmitter.varFile = varFile;
@@ -115,14 +115,14 @@ class Dyna {
             Sys.println(PrgmUtils.convToStr(tracerEmitter.emitted));
         }
 
-        { // gen code for a(I)*d(I,J)
+        { // gen code for c(0) += a(I)*d(I,J).
             trace('-----');
 
             var tracerEmitter:LinearStrategy = new LinearStrategy();
             tracerEmitter.prgm = [
                 Term.Assign(Aggregation.ADD,
                     Op.Arr("c",[Op.ConstInt(0)]),
-                    Op.MulArr([Op.Arr("a",[Op.Var("I")]), Op.Arr("d",[Op.Var("I"), Op.Var("J")])])
+                    [Op.MulArr([Op.Arr("a",[Op.Var("I")]), Op.Arr("d",[Op.Var("I"), Op.Var("J")])])]
                 ),
             ];
             tracerEmitter.varFile = varFile;
@@ -135,14 +135,14 @@ class Dyna {
             Sys.println(PrgmUtils.convToStr(tracerEmitter.emitted));
         }
 
-        { // gen code for a(I)*d(I,I)
+        { // gen code for c(0) += a(I)*d(I,I).
             trace('-----');
 
             var tracerEmitter:LinearStrategy = new LinearStrategy();
             tracerEmitter.prgm = [
                 Term.Assign(Aggregation.ADD,
                     Op.Arr("c",[Op.ConstInt(0)]),
-                    Op.MulArr([Op.Arr("a",[Op.Var("I")]), Op.Arr("d",[Op.Var("I"), Op.Var("I")])])
+                    [Op.MulArr([Op.Arr("a",[Op.Var("I")]), Op.Arr("d",[Op.Var("I"), Op.Var("I")])])]
                 ),
             ];
             tracerEmitter.varFile = varFile;
@@ -156,14 +156,14 @@ class Dyna {
         }
 
 
-        { // gen code for c(J) += a(I)*d(I,J)
+        { // gen code for c(J) += a(I)*d(I,J).
             trace('-----');
 
             var tracerEmitter:LinearStrategy = new LinearStrategy();
             tracerEmitter.prgm = [
                 Term.Assign(Aggregation.ADD,
                     Op.Arr("c",[Op.Var("J")]),
-                    Op.MulArr([Op.Arr("a",[Op.Var("I")]), Op.Arr("d",[Op.Var("I"), Op.Var("J")])])
+                    [Op.MulArr([Op.Arr("a",[Op.Var("I")]), Op.Arr("d",[Op.Var("I"), Op.Var("J")])])]
                 ),
             ];
             tracerEmitter.varFile = varFile;
@@ -183,11 +183,11 @@ class Dyna {
 
             var tracerEmitter:LinearStrategy = new LinearStrategy();
             tracerEmitter.prgm = [
-                Term.Equal(Op.Arr("sqrtP2",[Op.Var("X")]), Op.Arr("sqrt", [Op.MulArr([Op.Var("X"), Op.ConstFloat(2.0)])])),
+                Term.Equal(Op.Arr("sqrtP2",[Op.Var("X")]), [Op.Arr("sqrt", [Op.MulArr([Op.Var("X"), Op.ConstFloat(2.0)])])]),
 
                 Term.Assign(Aggregation.ADD,
                     Op.Arr("c",[Op.Var("I")]),
-                    Op.MulArr([Op.Arr("sqrtP2",[Op.Arr("a",[Op.Var("I")])])])
+                    [Op.MulArr([Op.Arr("sqrtP2",[Op.Arr("a",[Op.Var("I")])])])]
                 ),
             ];
             tracerEmitter.varFile = varFile;
@@ -207,7 +207,7 @@ class Dyna {
             var ePow2x = Op.Arr("exp", [Op.MulArr([Op.ConstFloat(2.0), Op.Arr("y", [Op.Var("I")])])]);
 
             var prgm = [
-                Term.Assign(Aggregation.NONE,Op.Arr("l",[Op.Var("I")]),   Op.Div(Op.AddArr([ePow2x, Op.ConstFloat(-1.0)]), Op.AddArr([ePow2x, Op.ConstFloat(1.0)]))), // l(i) := (e^(2x) - 1)/(e^(2x) + 1)
+                Term.Assign(Aggregation.NONE,Op.Arr("l",[Op.Var("I")]),   [Op.Div(Op.AddArr([ePow2x, Op.ConstFloat(-1.0)]), Op.AddArr([ePow2x, Op.ConstFloat(1.0)]))]), // l(i) := (e^(2x) - 1)/(e^(2x) + 1)
             ];
 
             var tracerEmitter:LinearStrategy = new LinearStrategy();
@@ -296,7 +296,7 @@ class Unroller {
     // public for testing
     public function substFnWithUniqueVarnames(term:Term): Term {
         switch(term) {
-            case Equal(head, body):
+            case Equal(head, [body]):
             switch(head) {
                 case Arr(headArrName, headArgs):
 
@@ -314,14 +314,14 @@ class Unroller {
                     }
                 }
 
-                return Equal(substHead,substBody);
+                return Equal(substHead,[substBody]);
 
                 case _:
                 throw "Expected Arr as head   ex: a(I)";
             }
 
             case _:
-            throw "Internal Error - expected Equal"; // is a internal error because something gone horibly wrong
+            throw "Internal Error - expected Equal with one conjunction"; // is a internal error because something gone horibly wrong
         }
     }
 
@@ -386,7 +386,7 @@ class Unroller {
                     var rewriteFnBody: Op = null; // function body which we are rewriting
 
                     switch(fn) {
-                        case Equal(Arr(_, fnHeadArgs), fnBody):
+                        case Equal(Arr(_, fnHeadArgs), [fnBody]):
 
                         rewriteFnBody = fnBody; // current rewrite of the fn body is the current fn body
 
@@ -405,7 +405,7 @@ class Unroller {
                         }
 
                         case _:
-                        throw "Internal Error - expected Equal"; // is a internal error because something gone horibly wrong
+                        throw "Internal Error - expected Equal with one conjunction"; // is a internal error because something gone horibly wrong
                     }
 
                     return {res:rewriteFnBody, recur:false}; // we don't want to process it recursivly
@@ -423,7 +423,7 @@ class Unroller {
         var resArr:Array<Term> = [];
 
         switch(term) {
-            case Term.Assign(aggr, Op.Arr(arrNameDest, destIdxs), body):
+            case Term.Assign(aggr, Op.Arr(arrNameDest, destIdxs), [body]):
             
             var body2:Op = substFnDefsByBody(body); // body2 is the body after "inlineing" of function definitions
 
@@ -550,7 +550,7 @@ class Unroller {
                     lefthandSide = replaceVar(lefthandSide, iAssigmentVarName, replaceOp);
                 }
                 
-                return Term.Assign(aggr, lefthandSide, righthandSide);
+                return Term.Assign(aggr, lefthandSide, [righthandSide]);
             }
             
             // instantiate body of Rule for each variable assignment
@@ -711,9 +711,9 @@ class Executive {
     // executes assignment
     public static function execAssign(assign:Term, varFile:VarFile) {
         switch (assign) {
-            case Assign(Aggregation.NONE, dest, source):
+            case Assign(Aggregation.NONE, dest, [body]): // handle body with one conjunction
 
-            var val = calc(source, varFile);
+            var val = calc(body, varFile);
 
             switch(dest) {
                 case Arr(name, idxs):
@@ -849,8 +849,9 @@ enum Aggregation {
 }
 
 enum Term {
-    Equal(head:Op, body:Op); // equal, to define something, ex: add1(X) = X+1.
-    Assign(aggr:Aggregation, dest:Op, source:Op); // assignment: ex: b(0) := a(0).   or   b(0) += 5.
+    // body is always a conjuction of Op's (which is called term in the literatur of Dyna)
+    Equal(head:Op, body:Array<Op>); // equal, to define something, ex: add1(X) = X+1.
+    Assign(aggr:Aggregation, head:Op, body:Array<Op>); // assignment: ex: b(0) := a(0).   or   b(0) += 5.
 }
 
 // TODO< rename to Expr >
@@ -1306,23 +1307,24 @@ class VarAssigment {
     }
 }
 
-// tool to print program to console
+// tool to convert program to string
 class PrgmUtils {
     public static function convToStr(prgm:Array<Term>): String {
         return [
             for(iTerm in prgm) {
                 switch(iTerm) {
-                    case Assign(Aggregation.ADD, dest, source):
-                    '${OpUtils.convToStr(dest)} += ${OpUtils.convToStr(source)}';
-                    case Term.Assign(Aggregation.NONE, dest, src):
-                    '${OpUtils.convToStr(dest)} := ${OpUtils.convToStr(src)}';
-                    case Assign(Aggregation.MIN, dest, source):
-                    '${OpUtils.convToStr(dest)} min= ${OpUtils.convToStr(source)}';
-                    case Assign(Aggregation.MAX, dest, source):
-                    '${OpUtils.convToStr(dest)} max= ${OpUtils.convToStr(source)}';
-                    case Equal(head, body):
-                    '${OpUtils.convToStr(head)} = ${OpUtils.convToStr(body)}';
-                    
+                    case Assign(aggr, dest, bodyConj):
+                    var aggrStr = switch(aggr) {
+                        case Aggregation.NONE:":=";
+                        case Aggregation.ADD:"+=";
+                        case Aggregation.MIN:"min=";
+                        case Aggregation.MAX:"max=";
+                    }
+
+                    '${OpUtils.convToStr(dest)} $aggrStr ${bodyConj.map(iTerm -> OpUtils.convToStr(iTerm)).join(", ")}.';
+
+                    case Equal(head, bodyConj):
+                    '${OpUtils.convToStr(head)} = ${bodyConj.map(iTerm -> OpUtils.convToStr(iTerm)).join(", ")}.';
                 };
             }].join("\n");
     }

@@ -28,17 +28,17 @@ class TestCodegen {
                 // definition of tanh
                 Term.Equal(
                     Op.Arr("tanh",[Op.Var("Q")]),
-                    Op.Div(Op.AddArr([ePow2x, Op.ConstFloat(-1.0)]), Op.AddArr([ePow2x, Op.ConstFloat(1.0)])) // l(i) := (e^(2Q) - 1)/(e^(2Q) + 1)
+                    [Op.Div(Op.AddArr([ePow2x, Op.ConstFloat(-1.0)]), Op.AddArr([ePow2x, Op.ConstFloat(1.0)]))] // l(i) := (e^(2Q) - 1)/(e^(2Q) + 1)
                 ),
 
                 // matrix mul
-                Term.Assign(Aggregation.ADD,Op.Arr("t0",[Op.Var("I")]),   Op.MulArr([Op.Arr("i", [Op.Var("I")]), Op.Arr("w", [Op.Var("I"), Op.Var("J")])])),
+                Term.Assign(Aggregation.ADD,Op.Arr("t0",[Op.Var("I")]),   [Op.MulArr([Op.Arr("i", [Op.Var("I")]), Op.Arr("w", [Op.Var("I"), Op.Var("J")])])]),
                 
                 // add bias
-                Term.Assign(Aggregation.NONE,Op.Arr("t",[Op.Var("I")]),   Op.AddArr([Op.Arr("t0", [Op.Var("I")]), Op.Arr("bias0", [Op.Var("I")])])),
+                Term.Assign(Aggregation.NONE,Op.Arr("t",[Op.Var("I")]),   [Op.AddArr([Op.Arr("t0", [Op.Var("I")]), Op.Arr("bias0", [Op.Var("I")])])]),
 
 
-                Term.Assign(Aggregation.NONE,Op.Arr("l",[Op.Var("I")]),   Op.Arr("tanh", [Op.Arr("t", [Op.Var("I")])])), // l(I) := tanh(t(I)).
+                Term.Assign(Aggregation.NONE,Op.Arr("l",[Op.Var("I")]),   [Op.Arr("tanh", [Op.Arr("t", [Op.Var("I")])])]), // l(I) := tanh(t(I)).
             ];
 
             var tracerEmitter:LinearStrategy = new LinearStrategy();

@@ -86,7 +86,7 @@ class ConvertDynaToCode {
 
     public function convTerm(term:Dyna.Term, varFile:Dyna.VarFile): String {
         switch (term) {
-            case Assign(aggr, dest, source):
+            case Assign(aggr, dest, [body]):
             
             switch(dest) {
                 case Arr(name, idxs):
@@ -99,16 +99,16 @@ class ConvertDynaToCode {
                     if (arr.isDense()) {
                         if (arr.dim == 1) {
                             switch (aggr) {
-                                case NONE: return 'ctx.vars.get("$name").dense[${staticIdxs[0]}] = ${convOp(source, varFile)};';
-                                case ADD: return 'ctx.vars.get("$name").dense[${staticIdxs[0]}] += ${convOp(source, varFile)};';
-                                case MIN: return 'ctx.vars.get("$name").dense[${staticIdxs[0]}] = Math.min(ctx.vars.get("$name").dense[${staticIdxs[0]}], ${convOp(source, varFile)});';
-                                case MAX: return 'ctx.vars.get("$name").dense[${staticIdxs[0]}] = Math.max(ctx.vars.get("$name").dense[${staticIdxs[0]}], ${convOp(source, varFile)});';
+                                case NONE: return 'ctx.vars.get("$name").dense[${staticIdxs[0]}] = ${convOp(body, varFile)};';
+                                case ADD: return 'ctx.vars.get("$name").dense[${staticIdxs[0]}] += ${convOp(body, varFile)};';
+                                case MIN: return 'ctx.vars.get("$name").dense[${staticIdxs[0]}] = Math.min(ctx.vars.get("$name").dense[${staticIdxs[0]}], ${convOp(body, varFile)});';
+                                case MAX: return 'ctx.vars.get("$name").dense[${staticIdxs[0]}] = Math.max(ctx.vars.get("$name").dense[${staticIdxs[0]}], ${convOp(body, varFile)});';
                             }
                         }
                         else if(arr.dim == 2) {
                             switch (aggr) {
-                                case NONE: return 'ctx.vars.get("$name").denseSetAt2(${staticIdxs[0]}, ${staticIdxs[1]}, ${convOp(source, varFile)});';
-                                case ADD: return 'HaxeRuntime.aggrAddDense2(ctx.vars.get("$name"), ${staticIdxs[0]}, ${staticIdxs[1]}, ${convOp(source, varFile)});';
+                                case NONE: return 'ctx.vars.get("$name").denseSetAt2(${staticIdxs[0]}, ${staticIdxs[1]}, ${convOp(body, varFile)});';
+                                case ADD: return 'HaxeRuntime.aggrAddDense2(ctx.vars.get("$name"), ${staticIdxs[0]}, ${staticIdxs[1]}, ${convOp(body, varFile)});';
                                 case MIN: throw "not implemented!";
                                 case MAX: throw "not implemented!"; 
                             }
@@ -119,10 +119,10 @@ class ConvertDynaToCode {
                     }
                     else {
                         switch (aggr) {
-                            case NONE: return 'ctx.vars.get("$name").map.set("$staticKey", ${convOp(source, varFile)});';
-                            case ADD: return 'HaxeRuntime.aggrAddSparse(ctx.vars.get("$name"), "$staticKey", ${convOp(source, varFile)});';
-                            case MIN: return 'HaxeRuntime.aggrMinSparse(ctx.vars.get("$name"), "$staticKey", ${convOp(source, varFile)});';
-                            case MAX: return 'HaxeRuntime.aggrMaxSparse(ctx.vars.get("$name"), "$staticKey", ${convOp(source, varFile)});';
+                            case NONE: return 'ctx.vars.get("$name").map.set("$staticKey", ${convOp(body, varFile)});';
+                            case ADD: return 'HaxeRuntime.aggrAddSparse(ctx.vars.get("$name"), "$staticKey", ${convOp(body, varFile)});';
+                            case MIN: return 'HaxeRuntime.aggrMinSparse(ctx.vars.get("$name"), "$staticKey", ${convOp(body, varFile)});';
+                            case MAX: return 'HaxeRuntime.aggrMaxSparse(ctx.vars.get("$name"), "$staticKey", ${convOp(body, varFile)});';
                         }
                     }
                 }
@@ -130,10 +130,10 @@ class ConvertDynaToCode {
                     throw "not implemented!";
                     /* old untested code for sparse access
                     switch (aggr) {
-                        case NONE: return 'ctx->${name}__$staticKey = ${convOp(source, varFile)};'; // static reference
-                        case ADD: return 'ctx->${name}__$staticKey = aggrAddSparse(ctx->${name}__$staticKey, ${convOp(source, varFile)});';
-                        case MIN: return 'ctx->${name}__$staticKey = aggrMinSparse(ctx->${name}__$staticKey, ${convOp(source, varFile)});';
-                        case MAX: return 'ctx->${name}__$staticKey = aggrMaxSparse(ctx->${name}__$staticKey, ${convOp(source, varFile)});';
+                        case NONE: return 'ctx->${name}__$staticKey = ${convOp(body, varFile)};'; // static reference
+                        case ADD: return 'ctx->${name}__$staticKey = aggrAddSparse(ctx->${name}__$staticKey, ${convOp(body, varFile)});';
+                        case MIN: return 'ctx->${name}__$staticKey = aggrMinSparse(ctx->${name}__$staticKey, ${convOp(body, varFile)});';
+                        case MAX: return 'ctx->${name}__$staticKey = aggrMaxSparse(ctx->${name}__$staticKey, ${convOp(body, varFile)});';
                     } */
                 }
                 else {
