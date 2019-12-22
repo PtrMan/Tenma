@@ -70,7 +70,7 @@ class Dyna {
 
         // sigmoid activation
         // l(0) := 1.0/(1.0 + exp(-x(0)))
-        var as1 = Term.Assign(Aggregation.NONE,Op.Arr("l",[Op.ConstInt(0)]),   Op.Div(Op.ConstFloat(1.0), Op.AddArr([Op.ConstFloat(1.0), Op.FnCall("exp", [Op.UnaryNeg(Op.Arr("x", [Op.ConstInt(0)]))])]) ));
+        var as1 = Term.Assign(Aggregation.NONE,Op.Arr("l",[Op.ConstInt(0)]),   Op.Div(Op.ConstFloat(1.0), Op.AddArr([Op.ConstFloat(1.0), Op.Arr("exp", [Op.UnaryNeg(Op.Arr("x", [Op.ConstInt(0)]))])]) ));
         Executive.execAssign(as1, varFile);
 
         // c(0) := a(0)*b(0) + l(0)
@@ -183,7 +183,7 @@ class Dyna {
 
             var tracerEmitter:LinearStrategy = new LinearStrategy();
             tracerEmitter.prgm = [
-                Term.Equal(Op.Arr("sqrtP2",[Op.Var("X")]), Op.FnCall("sqrt", [Op.MulArr([Op.Var("X"), Op.ConstFloat(2.0)])])),
+                Term.Equal(Op.Arr("sqrtP2",[Op.Var("X")]), Op.Arr("sqrt", [Op.MulArr([Op.Var("X"), Op.ConstFloat(2.0)])])),
 
                 Term.Assign(Aggregation.ADD,
                     Op.Arr("c",[Op.Var("I")]),
@@ -204,7 +204,7 @@ class Dyna {
         { // program with complex activation function
             trace('-----');
 
-            var ePow2x = Op.FnCall("exp", [Op.MulArr([Op.ConstFloat(2.0), Op.Arr("y", [Op.Var("I")])])]);
+            var ePow2x = Op.Arr("exp", [Op.MulArr([Op.ConstFloat(2.0), Op.Arr("y", [Op.Var("I")])])]);
 
             var prgm = [
                 Term.Assign(Aggregation.NONE,Op.Arr("l",[Op.Var("I")]),   Op.Div(Op.AddArr([ePow2x, Op.ConstFloat(-1.0)]), Op.AddArr([ePow2x, Op.ConstFloat(1.0)]))), // l(i) := (e^(2x) - 1)/(e^(2x) + 1)
@@ -349,9 +349,6 @@ class Unroller {
                 case Div(arg0, arg1):
                 Div(substByFn(arg0, fn), substByFn(arg1, fn));
 
-                case FnCall(name, args):
-                FnCall(name, [for(iArg in args) substByFn(iArg, fn)]);
-
                 case UnaryNeg(arg):
                 UnaryNeg(substByFn(arg, fn));
 
@@ -462,8 +459,11 @@ class Unroller {
                         case Var(name):
                         case ConstFloat(val):
                         case ConstInt(val):
-                        
-                        case Arr(arrName, idxs): // ex: a(I)
+
+
+                        case Arr(fnName, args) if (["exp","sqrt","abs","pow","cos","sin","min","max"].filter(iv -> iv == fnName).length > 0):
+                        for(iArg in args) internalRec(iArg);                        
+                        case Arr(arrName, idxs): // is array access  ex: a(I)
                         accesses.push({rule:arrName, params:idxs});
                         
                         case AddArr(args):
@@ -476,8 +476,6 @@ class Unroller {
                         internalRec(arg0);
                         internalRec(arg1);
 
-                        case FnCall(name, args):
-                        for(iArg in args) internalRec(iArg);
 
                         case UnaryNeg(arg):
                         internalRec(arg);
@@ -577,9 +575,9 @@ class Unroller {
         }
 
         switch(op) {
-            case Arr(name, idxs):
+            case Arr(name, args):
             {
-                var substIdxs = idxs.map(iIdx -> subst(iIdx, search, replacement));
+                var substIdxs = args.map(iArg -> subst(iArg, search, replacement));
                 return Arr(name, substIdxs);
             }
 
@@ -591,9 +589,6 @@ class Unroller {
 
             case Div(arg0, arg1):
             return Div(subst(arg0, search, replacement), subst(arg1, search, replacement));
-
-            case FnCall(name, args):
-            return FnCall(name, args.map(iArg -> subst(iArg, search, replacement)));
 
             case UnaryNeg(arg):
             return UnaryNeg(subst(arg, search, replacement));
@@ -638,7 +633,11 @@ class Unroller {
             case ConstFloat(val):
             case ConstInt(val):
             
-            case Arr(arrName, idxs) if (hasOnlyVars(idxs)): // ex: a(I)            
+            // is function?
+            case Arr(fnName, args) if (["exp","sqrt","abs","pow","cos","sin","min","max"].filter(iv -> iv == fnName).length > 0):
+            for(iArg in args) retArrAccess(iArg, res);
+            
+            case Arr(arrName, idxs) if (hasOnlyVars(idxs)): // is array access   ex: a(I)            
             for (iVarName in retVarNames(idxs)) { // iterate over all variable names of array access
                 {
                     var found=false;
@@ -669,8 +668,12 @@ class Unroller {
                 res.set(iVarName, varnames);
             }
 
+            
+
+
             case Arr(name, idxs):
             // ignore
+            trace('warning - ignore Arr');
 
             case AddArr(args):
             for(iArg in args) retArrAccess(iArg, res);
@@ -681,9 +684,6 @@ class Unroller {
             case Div(arg0, arg1):
             retArrAccess(arg0, res);
             retArrAccess(arg1, res);
-
-            case FnCall(_, args):
-            for(iArg in args) retArrAccess(iArg, res);
 
             case UnaryNeg(arg):
             retArrAccess(arg, res);
@@ -763,6 +763,22 @@ class Executive {
             case ConstInt(val):
             return val;
 
+            case Arr("exp",[arg]):
+            return Math.exp(calc(arg, varFile));
+            case Arr("sqrt",[arg]):
+            return Math.sqrt(calc(arg, varFile));
+            case Arr("abs",[arg]):
+            return Math.abs(calc(arg, varFile));
+            case Arr("pow",[arg0,arg1]):
+            return Math.pow(calc(arg0, varFile),calc(arg1, varFile));
+            case Arr("cos",[arg]):
+            return Math.cos(calc(arg, varFile));
+            case Arr("sin",[arg]):
+            return Math.sin(calc(arg, varFile));
+            case Arr("min",[arg0,arg1]):
+            return Math.min(calc(arg0, varFile),calc(arg1, varFile));
+            case Arr("max",[arg0,arg1]):
+            return Math.max(calc(arg0, varFile),calc(arg1, varFile));
             case Arr(name, args):
             { // it is a array access
                 var indices:Array<Int> = args.map(iIdx -> Std.int(calc(iIdx, varFile))); // compute concrete indices
@@ -810,23 +826,6 @@ class Executive {
             case Div(arg0, arg1):
             return calc(arg0, varFile)/calc(arg1, varFile);
 
-            case FnCall("exp",[arg]):
-            return Math.exp(calc(arg, varFile));
-            case FnCall("sqrt",[arg]):
-            return Math.sqrt(calc(arg, varFile));
-            case FnCall("abs",[arg]):
-            return Math.abs(calc(arg, varFile));
-            case FnCall("pow",[arg0,arg1]):
-            return Math.pow(calc(arg0, varFile),calc(arg1, varFile));
-            case FnCall("cos",[arg]):
-            return Math.cos(calc(arg, varFile));
-            case FnCall("sin",[arg]):
-            return Math.sin(calc(arg, varFile));
-            case FnCall("min",[arg0,arg1]):
-            return Math.min(calc(arg0, varFile),calc(arg1, varFile));
-            case FnCall("max",[arg0,arg1]):
-            return Math.max(calc(arg0, varFile),calc(arg1, varFile));
-
             case UnaryNeg(arg):
             return -calc(arg, varFile);
 
@@ -859,12 +858,12 @@ enum Op {
     Var(name:String); // variable access, ex: a(I), where I is the variable
     ConstFloat(val:Float);
     ConstInt(val:Int);
-    Arr(name:String, args:Array<Op>); // array access, indices are for each dimension
+    Arr(name:String, args:Array<Op>); // can be many things
+                                      // array access, indices are for each dimension
+                                      // generalized function call
     AddArr(args: Array<Op>);
     MulArr(args: Array<Op>);
     Div(arg0:Op, arg1:Op);
-
-    FnCall(name:String, args:Array<Op>); // generalized function call
 
     UnaryNeg(arg: Op); // unary negation
 
@@ -925,16 +924,6 @@ class OpUtils {
                 case _:false;
             }
 
-            case FnCall(name, args):
-            switch(b) {
-                case FnCall(nameb,argsb) if(name==nameb&&args.length==argsb.length):
-                for(idx in 0...args.length) {
-                    if (!eq(args[idx],argsb[idx]))  return false;
-                }
-                true;
-                case _:false;
-            }
-
             case UnaryNeg(arg):
             switch(b) {
                 case UnaryNeg(argb) if (eq(arg,argb)):true;
@@ -982,9 +971,6 @@ class OpUtils {
 
             case Div(arg0, arg1):
             return "("+convToStr(arg0)+"/"+convToStr(arg1)+")";
-
-            case FnCall(name, args):
-            return '$name(${args.map(iArg->convToStr(iArg))})';
 
             case UnaryNeg(arg):
             return "-"+convToStr(arg);

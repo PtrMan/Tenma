@@ -18,6 +18,19 @@ class ConvertDynaToCode {
             case ConstInt(val):
             return '$val';
 
+
+            
+            case Arr(fnName, args) if (["exp","sqrt","abs","pow","cos","sin","min","max"].filter(iv -> iv == fnName).length > 0):
+            if (target == "haxe") {
+                return 'Math.$fnName(${args.map(iArg -> convOp(iArg, varFile)).join(", ")})';
+            }
+            else if(target == "cuda") {
+                return '$fnName(${args.map(iArg -> convOp(iArg, varFile)).join(", ")})';
+            }
+            else {
+                throw 'Not supported target $target!';
+            }
+
             case Arr(name, idxs):
             // convert index to "key"-string for hashmap
             var staticKey:String = calcStaticKeyForArrAccess(expr);
@@ -59,15 +72,6 @@ class ConvertDynaToCode {
 
             case Div(arg0, arg1):
             return "("+convOp(arg0, varFile)+"/"+convOp(arg1, varFile)+")";
-
-            case FnCall(name, args):
-            if (target == "haxe") {
-                return 'Math.$name(${args.map(iArg -> convOp(iArg, varFile)).join(", ")})';
-            }
-            else if(target == "cuda") {
-                return '$name(${args.map(iArg -> convOp(iArg, varFile)).join(", ")})';
-            }
-            else throw 'FnCall not implemented for target "$target"';
 
             case UnaryNeg(arg):
             return "-"+convOp(arg, varFile);

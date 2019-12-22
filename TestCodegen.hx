@@ -22,7 +22,7 @@ class TestCodegen {
         { // program with complex activation function
             trace('-----');
 
-            var ePow2x = Op.FnCall("exp", [Op.MulArr([Op.ConstFloat(2.0), Op.Var("Q")])]);
+            var ePow2x = Op.Arr("exp", [Op.MulArr([Op.ConstFloat(2.0), Op.Var("Q")])]);
 
             var prgm = [
                 // definition of tanh
