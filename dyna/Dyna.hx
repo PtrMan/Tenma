@@ -88,10 +88,12 @@ class Dyna {
             );
 
             assigns = assigns.concat(new Unroller().unroll(as2, varFile));
+
+            Sys.println(PrgmUtils.convToStr(assigns));
         }
 
-        Sys.println(PrgmUtils.convToStr(assigns));
 
+        
         { // gen code for a(I)*b(I)
             trace('-----');
 
@@ -218,14 +220,6 @@ class Dyna {
             // debug emitted program
             Sys.println(PrgmUtils.convToStr(tracerEmitter.emitted));
         }
-
-
-
-
-        //var target = new ConvertDynaToCode();
-        //if(target.target == "haxe") Sys.println("class OutDyna0 {");
-        //Sys.println(target.convAsFunction(assigns, "fn0")); // convert as function
-        //if(target.target == "haxe") Sys.println("}");
     }
 }
 
@@ -725,7 +719,7 @@ class Executive {
                 {
                     var indices:Array<Int> = idxs.map(iIdx -> Std.int(calc(iIdx, varFile))); // compute concrete indices
 
-                    trace('access $name(${indices.map(v -> '$v').join(", ")})');
+                    trace('access dest $name(${indices.map(v -> '$v').join(", ")})');
                     var idxStrKey:String = indices.map(v -> '$v').join("_"); // convert index to string key
 
     	            var arr:ArrObj = varFile.vars.get(name);
@@ -733,7 +727,21 @@ class Executive {
                         arr = new ArrObj(idxs.length);
                         varFile.vars.set(name, arr);
                     }
-                    varFile.vars.get(name).map.set(idxStrKey, val);
+
+                    if (arr.isDense()) {
+                        if (arr.dim == 1) {
+                            arr.dense[indices[0]] = val;
+                        }
+                        else if (arr.dim == 2) {
+                            arr.denseSetAt2(indices[0], indices[1], val);
+                        }
+                        else {
+                            throw "Interpreter doesn't support more than two dimensions!";
+                        }
+                    }
+                    else {
+                        arr.map.set(idxStrKey, val);
+                    }
                 }
 
                 case _:
@@ -758,9 +766,24 @@ class Executive {
             {
                 var indices:Array<Int> = idxs.map(iIdx -> Std.int(calc(iIdx, varFile))); // compute concrete indices
 
-                trace('access $name(${indices.map(v -> '$v').join(", ")})');
+                trace('read $name(${indices.map(v -> '$v').join(", ")})');
                 var idxStrKey:String = indices.map(v -> '$v').join("_"); // convert index to string key
-                return varFile.vars.get('$name').map.get(idxStrKey); // lookup in database
+                var arr:ArrObj = varFile.vars.get('$name');
+
+                if (arr.isDense()) {
+                    if (arr.dim == 1) {
+                        return arr.dense[indices[0]];
+                    }
+                    else if (arr.dim == 2) {
+                        return arr.denseAt2(indices[0], indices[1]);
+                    }
+                    else {
+                        throw "Interpreter doesn't support more than two dimensions!";
+                    }
+                }
+                else { // sparse access
+                    return arr.map.get(idxStrKey); // lookup in database
+                }                
             }
 
             case AddArr(args):
