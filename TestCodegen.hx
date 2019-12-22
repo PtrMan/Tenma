@@ -41,7 +41,7 @@ class TestCodegen {
                 Term.Assign(Aggregation.NONE,Op.Arr("l",[Op.Var("I")]),   Op.Arr("tanh", [Op.Arr("t", [Op.Var("I")])])), // l(I) := tanh(t(I)).
             ];
 
-            var tracerEmitter:TracerEmitter = new TracerEmitter();
+            var tracerEmitter:LinearStrategy = new LinearStrategy();
             tracerEmitter.prgm = prgm;
             tracerEmitter.varFile = varFile;
             tracerEmitter.reopen();
@@ -67,8 +67,7 @@ class TestCodegen {
 
             Sys.println(emitted);
 
-            // TODO< store emitted code >
-            {
+            { // store emitted code
                 /*try*/ {
                     FileSystem.deleteFile("Out0.hx"); // delete old file
                 }

@@ -50,24 +50,6 @@
 
 // TODO< implement integer constraint ex: a(I,0) >
 
-
-
-
-// TODO< support array based storage >
-// TODO< decide when to choose which datastructure >
-
-
-// TODO LOW < handle *= >
-//    needed for factorial example
-//    :- item(fact, int, 1).
-//    :- item(natural, bool, false).
-//    fact(N) *= I if natural(I) & I < N.
-//    natural(1)    |= true.
-//    natural(=I+1) |= natural(I).
-//    from https://web.archive.org/web/20170315003048/http://dyna.org/wiki/index.php/Examples#Factorial
-
-// TODO SCIFI< implement lexer and parser >
-
 package dyna;
 
 class Dyna {
@@ -113,7 +95,7 @@ class Dyna {
         { // gen code for a(I)*b(I)
             trace('-----');
 
-            var tracerEmitter:TracerEmitter = new TracerEmitter();
+            var tracerEmitter:LinearStrategy = new LinearStrategy();
             tracerEmitter.prgm = [
                 Term.Assign(Aggregation.ADD,
                     Op.Arr("c",[Op.ConstInt(0)]),
@@ -133,7 +115,7 @@ class Dyna {
         { // gen code for a(I)*d(I,J)
             trace('-----');
 
-            var tracerEmitter:TracerEmitter = new TracerEmitter();
+            var tracerEmitter:LinearStrategy = new LinearStrategy();
             tracerEmitter.prgm = [
                 Term.Assign(Aggregation.ADD,
                     Op.Arr("c",[Op.ConstInt(0)]),
@@ -153,7 +135,7 @@ class Dyna {
         { // gen code for a(I)*d(I,I)
             trace('-----');
 
-            var tracerEmitter:TracerEmitter = new TracerEmitter();
+            var tracerEmitter:LinearStrategy = new LinearStrategy();
             tracerEmitter.prgm = [
                 Term.Assign(Aggregation.ADD,
                     Op.Arr("c",[Op.ConstInt(0)]),
@@ -174,7 +156,7 @@ class Dyna {
         { // gen code for c(J) += a(I)*d(I,J)
             trace('-----');
 
-            var tracerEmitter:TracerEmitter = new TracerEmitter();
+            var tracerEmitter:LinearStrategy = new LinearStrategy();
             tracerEmitter.prgm = [
                 Term.Assign(Aggregation.ADD,
                     Op.Arr("c",[Op.Var("J")]),
@@ -196,7 +178,7 @@ class Dyna {
         { // gen code for sqrtP2(X) = sqrt(X*2).   c(I) += sqrtP2(a(I)).
             trace('-----');
 
-            var tracerEmitter:TracerEmitter = new TracerEmitter();
+            var tracerEmitter:LinearStrategy = new LinearStrategy();
             tracerEmitter.prgm = [
                 Term.Equal(Op.Arr("sqrtP2",[Op.Var("X")]), Op.FnCall("sqrt", [Op.MulArr([Op.Var("X"), Op.ConstFloat(2.0)])])),
 
@@ -225,7 +207,7 @@ class Dyna {
                 Term.Assign(Aggregation.NONE,Op.Arr("l",[Op.Var("I")]),   Op.Div(Op.AddArr([ePow2x, Op.ConstFloat(-1.0)]), Op.AddArr([ePow2x, Op.ConstFloat(1.0)]))), // l(i) := (e^(2x) - 1)/(e^(2x) + 1)
             ];
 
-            var tracerEmitter:TracerEmitter = new TracerEmitter();
+            var tracerEmitter:LinearStrategy = new LinearStrategy();
             tracerEmitter.prgm = prgm;
             tracerEmitter.varFile = varFile;
             tracerEmitter.reopen();
@@ -993,8 +975,8 @@ class OpenTerm {
     public function new() {}
 }
 
-// tracer which tracks open Term's and emits linearized code
-class TracerEmitter {
+// is called that way because it executes all terms in order and emits linearized code
+class LinearStrategy {
     public var emitted:Array<Term> = []; // emitted result code of tracing
 
     public var prgm:Array<Term> = []; // actual interpreted program
