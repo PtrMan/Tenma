@@ -1175,6 +1175,14 @@ class BackwardRecursiveStrategy {
                 v = ArrObjUtils.readAt(arr, indices);
                 isVKnown = true; // now we know about v!
             }
+
+            case ConstFloat(c):
+            v=c;
+            isVKnown=true;
+            case ConstInt(c):
+            v=c;
+            isVKnown=true;
+
             case _:
             throw 'lookup() not valid for "${OpUtils.convToStr(j)}"';
         }
@@ -1249,11 +1257,32 @@ class BackwardRecursiveStrategy {
     // /param args is used to match existing terms in the program to fitting ones
     // /return null if no matching candidate was found
     private function lookupTermsByNameAndMatchingArgs(name:String, args:Array<Op>): Term {
-        throw "TODO - need to implement matching";
-
-        return null;
+        // function to check if the args can unify
+        function checkUnify(a:Array<Op>, b:Array<Op>):Bool {
+            if (a.length != b.length)  return false; // can't match up if it has different lengths
+            for(iIdx in 0...a.length) {
+                var ia:Op = a[iIdx];
+                var ib:Op = b[iIdx];
+                switch (ia) {
+                    case Var(_): // variable can unify with anything
+                    case _:
+                    if (!OpUtils.eq(ia, ib))  return false;
+                }
+            }
+            return true; // can unify if nothing failed
+        }
+        
+        for(iTerm in prgm) {
+            switch(iTerm) {
+                case Assign(Aggregation.NONE, Op.Arr(headName, headArgs), _) if (headName == name && checkUnify(headArgs, args)):
+                return iTerm;
+                
+                case _: // simply ignore
+            }
+        }
+        
+        return null; // no match
     }
-
 }
 
 
