@@ -57,6 +57,26 @@ class Dyna {
     public static function main() {
         UnittestUnroller.testOneVars2();
         UnittestUnroller.testTwoVars();
+
+
+        { // check BackwardRecursiveStrategy
+            
+            var varFile = new VarFile();
+            varFile.vars.set("a", ArrObj.create([5.0, 2.0]));
+
+            var strategy = new BackwardRecursiveStrategy(varFile);
+            strategy.prgm = [
+                // b(X) := a(X)+8.0.
+                Term.Assign(Aggregation.NONE,Op.Arr("b",[Op.Var("X")]),  [Op.AddArr([Op.Arr("a",[Op.Var("X")]), Op.ConstFloat(8.0)])]),
+            ];
+
+
+            // b(0)
+            var queryExpr:Op = Op.Arr("b", [Op.ConstInt(0)]);
+            Sys.println(strategy.lookup(queryExpr)); // compute solution
+
+        }
+        return; // we don't care about the other tests for now
         
         var varFile:VarFile = new VarFile();
         varFile.vars.set("a", ArrObj.create([5.0, 2.0]));
@@ -308,8 +328,8 @@ class Unroller {
                     switch(iHeadArg) {
                         case Var(iVarName):
                         var uniqueVarName:String = '|${uniqueVarCounter++}'; // need to gen unique var-name
-                        substHead = subst(substHead, Var(iVarName), Var(uniqueVarName)); // substitude
-                        substBody = subst(substBody, Var(iVarName), Var(uniqueVarName)); // substitude
+                        substHead = OpUtils.subst(substHead, Var(iVarName), Var(uniqueVarName)); // substitude
+                        substBody = OpUtils.subst(substBody, Var(iVarName), Var(uniqueVarName)); // substitude
                         case _:
                     }
                 }
@@ -399,7 +419,7 @@ class Unroller {
                             //trace('   ${OpUtils.convToStr(rewriteFnBody)}');
                             //trace('   ${OpUtils.convToStr(iCalleeHeadArg)}');
                             //trace('   ${OpUtils.convToStr(iCallerHeadArg)}');
-                            rewriteFnBody = subst(rewriteFnBody, iCalleeHeadArg, iCallerHeadArg);
+                            rewriteFnBody = OpUtils.subst(rewriteFnBody, iCalleeHeadArg, iCallerHeadArg);
                             //trace('|-');
                             //trace('   ${OpUtils.convToStr(rewriteFnBody)}');
                         }
@@ -539,7 +559,7 @@ class Unroller {
                 for (iAssigmentVarName in varAssignment.assignments.keys()) {
                     var assignedIndex:Int = varAssignment.assignments.get(iAssigmentVarName); // the assigned index for the variable
                     var replaceOp:Op = Op.ConstInt(assignedIndex);// Op with which we substitute it
-                    righthandSide = replaceVar(righthandSide, iAssigmentVarName, replaceOp);
+                    righthandSide = OpUtils.replaceVar(righthandSide, iAssigmentVarName, replaceOp);
                 }
 
                 // replace vars of lefthandside
@@ -547,7 +567,7 @@ class Unroller {
                 for (iAssigmentVarName in varAssignment.assignments.keys()) {
                     var assignedIndex:Int = varAssignment.assignments.get(iAssigmentVarName); // the assigned index for the variable
                     var replaceOp:Op = Op.ConstInt(assignedIndex);// Op with which we substitute it
-                    lefthandSide = replaceVar(lefthandSide, iAssigmentVarName, replaceOp);
+                    lefthandSide = OpUtils.replaceVar(lefthandSide, iAssigmentVarName, replaceOp);
                 }
                 
                 return Term.Assign(aggr, lefthandSide, [righthandSide]);
@@ -569,45 +589,6 @@ class Unroller {
         }
 
         return resArr;
-    }
-
-    // substitutes a Op search with replacement
-    public static function subst(op:Op, search:Op, replacement:Op): Op {
-        if (OpUtils.eq(op, search)) {
-            return replacement;
-        }
-
-        switch(op) {
-            case Arr(name, args):
-            {
-                var substIdxs = args.map(iArg -> subst(iArg, search, replacement));
-                return Arr(name, substIdxs);
-            }
-
-            case AddArr(args):
-            return AddArr(args.map(iArg -> subst(iArg, search, replacement)));
-
-            case MulArr(args):
-            return MulArr(args.map(iArg -> subst(iArg, search, replacement)));
-
-            case Div(arg0, arg1):
-            return Div(subst(arg0, search, replacement), subst(arg1, search, replacement));
-
-            case UnaryNeg(arg):
-            return UnaryNeg(subst(arg, search, replacement));
-
-            case Trinary(cond, truePath, falsePath):
-            return Trinary(subst(cond, search, replacement), subst(truePath, search, replacement), subst(falsePath, search, replacement));
-
-            case _:
-            return op; // return without any change for all others
-        }
-    }
-
-    // helper
-    // replaces a variable with a actual value(index)
-    private static function replaceVar(op:Op, varname:String, replacement:Op): Op {
-        return subst(op, Var(varname), replacement);
     }
 
     // public for unittesting
@@ -708,10 +689,104 @@ class VarFile {
     public function new() {}
 }
 
+// utilities for interpretation
+class InterpreterUtils {
+    // can the term have arguments?
+    /* commented because not used
+    public static function canHaveArgs(term:Op):Bool {
+        return switch (term) {
+            case Var(_): false;
+            case ConstFloat(_): false;
+            case ConstInt(_): false;
+            case Arr(_,_): true;
+            case AddArr(_): true;
+            case MulArr(_): true;
+            case Div(arg0, arg1): false;
+            case UnaryNeg(arg): false;
+            case Trinary(cond, truePath, falsePath): false;
+            case TempVal(name): false;
+        }
+    } */
+
+    // return arguments (if there are any)
+    public static function retArgs(term:Op): Array<Op> {
+        return switch (term) {
+            case Var(_): [];
+            case ConstFloat(_): [];
+            case ConstInt(_): [];
+            case Arr(_,args): args;
+            case AddArr(args): args;
+            case MulArr(args): args;
+            case Div(arg0, arg1): [arg0, arg1];
+            case UnaryNeg(arg): [arg];
+            case Trinary(cond, truePath, falsePath): [cond,truePath,falsePath];
+            case TempVal(name): [];
+        }
+    }
+
+    // compute result with actual values of arguments
+    public static function calcWithValOfArgs(term:Op, valOfArgs:Array<Float>): Float {
+        return switch (term) {
+            case Var(_): throw "Can't compute value of variable!";
+            case ConstFloat(val): val;
+            case ConstInt(val): val;
+
+            case Arr("exp",[_]) if (valOfArgs.length == 1):
+            return Math.exp(valOfArgs[0]);
+            case Arr("sqrt",[_]) if (valOfArgs.length == 1):
+            return Math.sqrt(valOfArgs[0]);
+            case Arr("abs",[_]) if (valOfArgs.length == 1):
+            return Math.abs(valOfArgs[0]);
+            case Arr("pow",[_,_]) if (valOfArgs.length == 2):
+            return Math.pow(valOfArgs[0],valOfArgs[1]);
+            case Arr("cos",[_]) if (valOfArgs.length == 1):
+            return Math.cos(valOfArgs[0]);
+            case Arr("sin",[_]) if (valOfArgs.length == 1):
+            return Math.sin(valOfArgs[0]);
+            case Arr("min",[_,_]) if (valOfArgs.length == 2):
+            return Math.min(valOfArgs[0],valOfArgs[1]);
+            case Arr("max",[_,_]) if (valOfArgs.length == 2):
+            return Math.max(valOfArgs[0],valOfArgs[1]);
+
+            case Arr(_,_): throw "Can't compute not specified Arr!"; // because we don't do variable lookups here or because the arguments don't match up
+
+            case AddArr(args):
+            if (args.length != valOfArgs.length) throw "Args length must match up!";
+            var res=0.0;
+            for(iRes in valOfArgs) {
+                res+=iRes;
+            }
+            res;
+
+            case MulArr(args):
+            if (args.length != valOfArgs.length) throw "Args length must match up!";
+            var res=1.0;
+            for(iRes in valOfArgs) {
+                res*=iRes;
+            }
+            res;
+
+            case Div(_, _):
+            if (valOfArgs.length != 2) throw "Expected two arguments!";
+            valOfArgs[0]/valOfArgs[1];
+
+            case UnaryNeg(_):
+            if (valOfArgs.length != 1) throw "Expected one argument!";
+            -valOfArgs[0];
+
+            case Trinary(_, _, _):
+            if (valOfArgs.length != 3) throw "Expected three arguments!";
+            return valOfArgs[0] >= 0.5 ? valOfArgs[1] : valOfArgs[2];
+
+            case TempVal(name): throw "Can't compute value of variable!";
+        }
+    }
+}
+
 class Executive {
     public function new() {}
 
-    // executes assignment
+    // executes assignment recursivly
     public static function execAssign(assign:Term, varFile:VarFile) {
         switch (assign) {
             case Assign(Aggregation.NONE, dest, [body]): // handle body with one conjunction
@@ -785,25 +860,9 @@ class Executive {
             case Arr(name, args):
             { // it is a array access
                 var indices:Array<Int> = args.map(iIdx -> Std.int(calc(iIdx, varFile))); // compute concrete indices
-
-                trace('read $name(${indices.map(v -> '$v').join(", ")})');
-                var idxStrKey:String = indices.map(v -> '$v').join("_"); // convert index to string key
                 var arr:ArrObj = varFile.vars.get('$name');
-
-                if (arr.isDense()) {
-                    if (arr.dim == 1) {
-                        return arr.dense[indices[0]];
-                    }
-                    else if (arr.dim == 2) {
-                        return arr.denseAt2(indices[0], indices[1]);
-                    }
-                    else {
-                        throw "Interpreter doesn't support more than two dimensions!";
-                    }
-                }
-                else { // sparse access
-                    return arr.map.get(idxStrKey); // lookup in database
-                }                
+                trace('read $name(${indices.map(v -> '$v').join(", ")})');
+                return ArrObjUtils.readAt(arr, indices);
             }
 
             case AddArr(args):
@@ -987,6 +1046,46 @@ class OpUtils {
             return 'TEMP_$name';
         }
     }
+
+    
+    // substitutes a Op search with replacement
+    public static function subst(op:Op, search:Op, replacement:Op): Op {
+        if (OpUtils.eq(op, search)) {
+            return replacement;
+        }
+
+        switch(op) {
+            case Arr(name, args):
+            {
+                var substIdxs = args.map(iArg -> subst(iArg, search, replacement));
+                return Arr(name, substIdxs);
+            }
+
+            case AddArr(args):
+            return AddArr(args.map(iArg -> subst(iArg, search, replacement)));
+
+            case MulArr(args):
+            return MulArr(args.map(iArg -> subst(iArg, search, replacement)));
+
+            case Div(arg0, arg1):
+            return Div(subst(arg0, search, replacement), subst(arg1, search, replacement));
+
+            case UnaryNeg(arg):
+            return UnaryNeg(subst(arg, search, replacement));
+
+            case Trinary(cond, truePath, falsePath):
+            return Trinary(subst(cond, search, replacement), subst(truePath, search, replacement), subst(falsePath, search, replacement));
+
+            case _:
+            return op; // return without any change for all others
+        }
+    }
+
+    // helper
+    // replaces a variable with a actual value(index)
+    public static function replaceVar(op:Op, varname:String, replacement:Op): Op {
+        return subst(op, Var(varname), replacement);
+    }
 }
 
 // tracks open expressions because variables changed
@@ -1007,7 +1106,7 @@ class LinearStrategy {
     // open set
     public var open:Array<Int> = []; // indices of open instructions to compute
 
-    public var varFile:VarFile; // used varibale file
+    public var varFile:VarFile; // used variable file
 
     private var unroller:Unroller = new Unroller(); // used unroller
 
@@ -1037,8 +1136,125 @@ class LinearStrategy {
     }
 }
 
+// Is a recursive backward inference execution strategy.
+// Recursion is the most simple implementation, but it may lead to stack overflow for medium sized programs and problems.
+//
+// reference: see "A Flexible Solver for Finite Arithmetic Circuits" http://cs.jhu.edu/~jason/papers/filardo+eisner.iclp12.pdf
+//            page 2
+class BackwardRecursiveStrategy {
+    public var prgm:Array<Term> = []; // actual interpreted program
+    public var varFile:VarFile; // used variable file
+
+    // memorized values
+    // key is the string serialization of the head in question
+    //public var memorized:Map<String, Float> = new Map<String, Float>();
+
+    public function new(varFile) {
+        this.varFile = varFile;
+    }
+
+    // /param j is the looked up "head"
+    public function lookup(j:Op): Float {
+        trace('lookup() w/ ${OpUtils.convToStr(j)}');
+
+        var v: Float = Math.NaN; // read value
+        var isVKnown = false; // do we know anything about j?
+        switch(j) {
+            case Arr(name, args):
+            // try to lookup name in varfile
+            if (varFile.vars.exists(name)) {
+                var arr:ArrObj = varFile.vars.get(name);
+
+                var indices:Array<Int> = args.map(iIdx -> 
+                    Std.int(
+                        switch (iIdx){
+                            case ConstInt(v): v;
+                            case _: throw 'Exec error: Not implemented/defined for index "${OpUtils.convToStr(iIdx)}"';
+                })); // compute concrete indices
+
+                v = ArrObjUtils.readAt(arr, indices);
+                isVKnown = true; // now we know about v!
+            }
+            case _:
+            throw 'lookup() not valid for "${OpUtils.convToStr(j)}"';
+        }
+
+        if (!isVKnown) { // we need to compute v if it is not known
+            v = compute(j);
+            isVKnown = true; // we know it now
+        }
+
+        // we have a choice to choose if we want to memorize v
+        // TODO LOW< memorize v >
+
+        return v;
+    }
+
+    public function compute(j:Op): Float {
+        switch(j) {
+            case Arr(arrName, args):
+            // * lookup arrName in program
+            var termCandidate:Term = lookupTermsByNameAndMatchingArgs(arrName, args);
+            if (termCandidate == null) { // didn't we find a candidate?
+                // we can't continue execution because we couldn't find the Term which describes the function
+                throw 'Runtime error: call "${OpUtils.convToStr(j)}" doesn\'t match with any heads in program!';
+            }
+
+            switch(termCandidate) {
+                case Assign(Aggregation.NONE, Arr(_, fnHeadArgs), [fnBody]):
 
 
+                // * unify arguments between caller and callee and rewrite body
+                var rewriteFnBody:Op = fnBody; // rewritten function body
+
+                for (iArgIdx in 0...fnHeadArgs.length) {
+                    var iCalleeHeadArg:Op = fnHeadArgs[iArgIdx];
+                    var iCallerHeadArg:Op = args[iArgIdx];
+
+                    trace('rewrite');
+                    trace('   ${OpUtils.convToStr(rewriteFnBody)}');
+                    trace('   ${OpUtils.convToStr(iCalleeHeadArg)}');
+                    trace('   ${OpUtils.convToStr(iCallerHeadArg)}');
+                    rewriteFnBody = OpUtils.subst(rewriteFnBody, iCalleeHeadArg, iCallerHeadArg);
+                    trace('|-');
+                    trace('    ${OpUtils.convToStr(rewriteFnBody)}');
+                }
+                
+                trace('fn body rewrite result = ${OpUtils.convToStr(rewriteFnBody)}');
+
+                
+
+                // * lookup components
+                var args:Array<Op> = InterpreterUtils.retArgs(rewriteFnBody);
+                var valOfArgs:Array<Float> = args.map(iArg -> lookup(iArg)); // lookup/compute arguments
+
+                // * compute result
+                return InterpreterUtils.calcWithValOfArgs(rewriteFnBody, valOfArgs); // compute result with actual values of arguments
+
+                case _: throw 'Runtime error: Expected x(Y) := .... term with one conjunction element!';
+            }
+
+            case _:
+            // either a internal error, or todo or just not defined!
+            throw 'compute not defined for "${OpUtils.convToStr(j)}"';
+        }
+
+        var args:Array<Op> = InterpreterUtils.retArgs(j);
+        var valOfArgs:Array<Float> = args.map(iArg -> lookup(iArg)); // lookup/compute arguments
+
+        return InterpreterUtils.calcWithValOfArgs(j, valOfArgs); // compute result with actual values of arguments
+    }
+
+    // looks up matching terms in the program
+    // /param args is used to match existing terms in the program to fitting ones
+    // /return null if no matching candidate was found
+    private function lookupTermsByNameAndMatchingArgs(name:String, args:Array<Op>): Term {
+        throw "TODO - need to implement matching";
+
+        return null;
+    }
+
+}
 
 
 // used to assign a cartesian product to the indices of arrays
@@ -1186,7 +1402,8 @@ class ConstraintUtils {
     }
 }
 
-// associative array object
+// array object
+// can be associative or dense
 class ArrObj {
     // keys are strings of indices
     public var map:Map<String, Float> = new Map<String, Float>();
@@ -1262,6 +1479,27 @@ class ArrObj {
         return res;
     }
 }
+
+class ArrObjUtils {
+    public static function readAt(arr:ArrObj, indices:Array<Int>):Float {
+        if (arr.isDense()) {
+            if (arr.dim == 1) {
+                return arr.dense[indices[0]];
+            }
+            else if (arr.dim == 2) {
+                return arr.denseAt2(indices[0], indices[1]);
+            }
+            else {
+                throw "Interpreter doesn't support more than two dimensions!";
+            }
+        }
+        else { // sparse access
+            var idxStrKey:String = indices.map(v -> '$v').join("_"); // convert index to string key
+            return arr.map.get(idxStrKey); // lookup in database
+        }
+    }
+}
+
 
 // set helper
 class SetUtil {
