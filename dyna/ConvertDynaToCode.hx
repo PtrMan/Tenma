@@ -49,7 +49,15 @@ class ConvertDynaToCode {
             }
             else if(target == "cuda") {
                 if (arr.isDense()) {
-                    throw "dense path for cuda is not implemented!"; // TODO
+                    if (arr.dim == 1) {
+                        return 'ctx->${name}[${staticIdxs[0]}]';
+                    }
+                    else if(arr.dim == 2) {
+                        return 'ctx->${name}[${staticIdxs[0]}*${arr.width} + ${staticIdxs[1]}]';
+                    }
+                    else {
+                        throw "not supported array dimension for dense access!";
+                    }
                 }
                 else {
                     return 'ctx->${name}__$staticKey'; // statically reference because GPU doesn't support lookup, and lookup is to slow
@@ -127,14 +135,36 @@ class ConvertDynaToCode {
                     }
                 }
                 else if(target=="cuda"){
-                    throw "not implemented!";
-                    /* old untested code for sparse access
-                    switch (aggr) {
-                        case NONE: return 'ctx->${name}__$staticKey = ${convOp(body, varFile)};'; // static reference
-                        case ADD: return 'ctx->${name}__$staticKey = aggrAddSparse(ctx->${name}__$staticKey, ${convOp(body, varFile)});';
-                        case MIN: return 'ctx->${name}__$staticKey = aggrMinSparse(ctx->${name}__$staticKey, ${convOp(body, varFile)});';
-                        case MAX: return 'ctx->${name}__$staticKey = aggrMaxSparse(ctx->${name}__$staticKey, ${convOp(body, varFile)});';
-                    } */
+                    
+                    if (arr.isDense()) {
+                        if (arr.dim == 1) {
+                            switch (aggr) {
+                                case NONE: return 'ctx->${name}[${staticIdxs[0]}] = ${convOp(body, varFile)};';
+                                case ADD: return 'ctx->${name}[${staticIdxs[0]}] += ${convOp(body, varFile)};';
+                                case MIN: return 'ctx->${name}[${staticIdxs[0]}] = Math.min(ctx->${name}[${staticIdxs[0]}], ${convOp(body, varFile)});';
+                                case MAX: return 'ctx->${name}[${staticIdxs[0]}] = Math.max(ctx->${name}[${staticIdxs[0]}], ${convOp(body, varFile)});';
+                            }
+                        }
+                        else if(arr.dim == 2) {
+                            switch (aggr) {
+                                case NONE: return 'ctx->${name}[${staticIdxs[0]}*${arr.width} + ${staticIdxs[1]}] = ${convOp(body, varFile)};';
+                                case ADD: return 'ctx->${name}[${staticIdxs[0]}*${arr.width} + ${staticIdxs[1]}] += ${convOp(body, varFile)};';
+                                case MIN: return 'ctx->${name}[${staticIdxs[0]}*${arr.width} + ${staticIdxs[1]}] = Math.min(ctx->${name}[${staticIdxs[0]}*${arr.width} + ${staticIdxs[1]}], ${convOp(body, varFile)});';
+                                case MAX: return 'ctx->${name}[${staticIdxs[0]}*${arr.width} + ${staticIdxs[1]}] = Math.max(ctx->${name}[${staticIdxs[0]}*${arr.width} + ${staticIdxs[1]}], ${convOp(body, varFile)});';
+                            }
+                        }
+                        else {
+                            throw "not supported array dimension for dense access!";
+                        }
+                    }
+                    else {
+                        switch (aggr) {
+                            case NONE: return 'ctx->${name}__$staticKey = ${convOp(body, varFile)};'; // static reference
+                            case ADD: return 'ctx->${name}__$staticKey = aggrAddSparse(ctx->${name}__$staticKey, ${convOp(body, varFile)});';
+                            case MIN: return 'ctx->${name}__$staticKey = aggrMinSparse(ctx->${name}__$staticKey, ${convOp(body, varFile)});';
+                            case MAX: return 'ctx->${name}__$staticKey = aggrMaxSparse(ctx->${name}__$staticKey, ${convOp(body, varFile)});';
+                        }
+                    }                    
                 }
                 else {
                     throw 'Assign not supported for target "$target"';

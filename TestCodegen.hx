@@ -31,6 +31,15 @@ class TestCodegen {
                     [Op.Div(Op.AddArr([ePow2x, Op.ConstFloat(-1.0)]), Op.AddArr([ePow2x, Op.ConstFloat(1.0)]))] // l(i) := (e^(2Q) - 1)/(e^(2Q) + 1)
                 ),
 
+                // definition of sigmoid activation
+                // sigmoid(X) := 1.0/(1.0 + exp(-X)).
+                Term.Equal(Op.Arr("sigmoid",[Op.Var("X")]),   [Op.Div(Op.ConstFloat(1.0), Op.AddArr([Op.ConstFloat(1.0), Op.Arr("exp", [Op.UnaryNeg(Op.Var("X"))])]) )]),
+                
+                // definition of relu activation
+                // relu(X) := max(X, 0.0).
+                Term.Equal(Op.Arr("relu",[Op.Var("X")]),   [Op.Arr("max", [Op.Var("X"),Op.ConstFloat(0.0)])]),
+        
+
                 // matrix mul
                 Term.Assign(Aggregation.ADD,Op.Arr("t0",[Op.Var("I")]),   [Op.MulArr([Op.Arr("i", [Op.Var("I")]), Op.Arr("w", [Op.Var("I"), Op.Var("J")])])]),
                 
@@ -57,7 +66,7 @@ class TestCodegen {
             trace("---");
             // emit code and print
             var codegen = new ConvertDynaToCode();
-            codegen.target = "haxe";
+            codegen.target = "cuda";
 
             var emitted = "";
             emitted += "import dyna.HaxeRuntime;\n";
