@@ -75,6 +75,9 @@ class Dyna {
             var queryExpr:Op = Op.Arr("b", [Op.ConstInt(0)]);
             Sys.println(strategy.lookup(queryExpr)); // compute solution
 
+            // repeat to see if it memorized
+            Sys.println(strategy.lookup(queryExpr)); // compute solution
+
         }
         return; // we don't care about the other tests for now
         
@@ -1147,7 +1150,8 @@ class BackwardRecursiveStrategy {
 
     // memorized values
     // key is the string serialization of the head in question
-    //public var memorized:Map<String, Float> = new Map<String, Float>();
+    public var memorized:Map<String, Float> = new Map<String, Float>();
+    public var memorize:Bool = true; // is memorization enabled?
 
     public function new(varFile) {
         this.varFile = varFile;
@@ -1159,7 +1163,17 @@ class BackwardRecursiveStrategy {
 
         var v: Float = Math.NaN; // read value
         var isVKnown = false; // do we know anything about j?
-        switch(j) {
+
+        { // try to find it in memorization database
+            var jKey:String = OpUtils.convToStr(j); // use string as key
+            if (memorized.exists(jKey)) {
+                trace('   found in memo');
+                v = memorized.get(jKey);
+                isVKnown = true;
+            }
+        }
+
+        if (!isVKnown) switch(j) {
             case Arr(name, args):
             // try to lookup name in varfile
             if (varFile.vars.exists(name)) {
@@ -1193,7 +1207,9 @@ class BackwardRecursiveStrategy {
         }
 
         // we have a choice to choose if we want to memorize v
-        // TODO LOW< memorize v >
+        if (memorize) {
+            memorized.set(OpUtils.convToStr(j), v);
+        }
 
         return v;
     }
