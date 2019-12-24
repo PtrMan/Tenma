@@ -485,7 +485,7 @@ class Unroller {
                         case ConstInt(val):
 
 
-                        case Arr(fnName, args) if (["exp","sqrt","abs","pow","cos","sin","min","max"].filter(iv -> iv == fnName).length > 0):
+                        case Arr(fnName, args) if (["exp","sqrt","abs","pow","cos","sin","min","max","log"].filter(iv -> iv == fnName).length > 0):
                         for(iArg in args) internalRec(iArg);                        
                         case Arr(arrName, idxs): // is array access  ex: a(I)
                         accesses.push({rule:arrName, params:idxs});
@@ -622,7 +622,7 @@ class Unroller {
             case ConstInt(val):
             
             // is function?
-            case Arr(fnName, args) if (["exp","sqrt","abs","pow","cos","sin","min","max"].filter(iv -> iv == fnName).length > 0):
+            case Arr(fnName, args) if (["exp","sqrt","abs","pow","cos","sin","min","max","log"].filter(iv -> iv == fnName).length > 0):
             for(iArg in args) retArrAccess(iArg, res);
             
             case Arr(arrName, idxs) if (hasOnlyVars(idxs)): // is array access   ex: a(I)            
@@ -751,6 +751,8 @@ class InterpreterUtils {
             return Math.min(valOfArgs[0],valOfArgs[1]);
             case Arr("max",[_,_]) if (valOfArgs.length == 2):
             return Math.max(valOfArgs[0],valOfArgs[1]);
+            case Arr("log",[_]) if (valOfArgs.length == 1):
+            return Math.log(valOfArgs[0]); // TODO< do we choose base e log? >
 
             case Arr(_,_): throw "Can't compute not specified Arr!"; // because we don't do variable lookups here or because the arguments don't match up
 
@@ -861,6 +863,8 @@ class Executive {
             return Math.min(calc(arg0, varFile),calc(arg1, varFile));
             case Arr("max",[arg0,arg1]):
             return Math.max(calc(arg0, varFile),calc(arg1, varFile));
+            case Arr("log",[arg]):
+            return Math.log(calc(arg, varFile));
             case Arr(name, args):
             { // it is a array access
                 var indices:Array<Int> = args.map(iIdx -> Std.int(calc(iIdx, varFile))); // compute concrete indices
@@ -1223,7 +1227,7 @@ class BackwardRecursiveStrategy {
 
     public function compute(j:Op): Float {
         switch(j) {
-            case Arr(fnName, args) if (["exp","sqrt","abs","pow","cos","sin","min","max"].filter(iv -> iv == fnName).length > 0): // is it a function?
+            case Arr(fnName, args) if (["exp","sqrt","abs","pow","cos","sin","min","max","log"].filter(iv -> iv == fnName).length > 0): // is it a function?
 
             var valOfArgs:Array<Float> = args.map(iArg -> lookup(iArg)); // lookup/compute arguments
 

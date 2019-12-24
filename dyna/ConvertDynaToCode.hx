@@ -20,7 +20,7 @@ class ConvertDynaToCode {
 
 
             
-            case Arr(fnName, args) if (["exp","sqrt","abs","pow","cos","sin","min","max"].filter(iv -> iv == fnName).length > 0):
+            case Arr(fnName, args) if (["exp","sqrt","abs","pow","cos","sin","min","max","log"].filter(iv -> iv == fnName).length > 0):
             if (target == "haxe") {
                 return 'Math.$fnName(${args.map(iArg -> convOp(iArg, varFile)).join(", ")})';
             }
