@@ -68,12 +68,7 @@ class TestCodegen {
             var codegen = new ConvertDynaToCode();
             codegen.target = "cuda";
 
-            var emitted = "";
-            emitted += "import dyna.HaxeRuntime;\n";
-            emitted += "class Out0 {\n";
-            emitted += codegen.convAsFunction(tracerEmitter.emitted, "fn0", varFile);
-            emitted += "}\n";
-
+            var emitted = convAsClassWithFunctions([{terms:tracerEmitter.emitted, name:"fn0"}] , varFile);
             Sys.println(emitted);
 
             { // store emitted code

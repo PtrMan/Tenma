@@ -202,6 +202,17 @@ class ConvertDynaToCode {
         }
     }
 
+    public function convAsClassWithFunctions(fns:Array< {terms:Array<Dyna.Term>, name:String} > , varFile:Dyna.VarFile): String {
+        var emitted = "";
+        emitted += "import dyna.HaxeRuntime;\n";
+        emitted += "class Out0 {\n";
+        for (iFn in fns) { // iterate over function definitions
+            emitted += convAsFunction(iFn.terms, iFn.name, varFile);
+        }
+        emitted += "}\n";
+        return emitted;
+    }
+
     // returns the string of a function which executes a series of assigns statically
     public function convAsFunction(terms:Array<Dyna.Term>, name:String, varFile:Dyna.VarFile): String {
         var res = "";
