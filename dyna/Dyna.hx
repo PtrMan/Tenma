@@ -1223,6 +1223,15 @@ class BackwardRecursiveStrategy {
 
     public function compute(j:Op): Float {
         switch(j) {
+            case Arr(fnName, args) if (["exp","sqrt","abs","pow","cos","sin","min","max"].filter(iv -> iv == fnName).length > 0): // is it a function?
+
+            var valOfArgs:Array<Float> = args.map(iArg -> lookup(iArg)); // lookup/compute arguments
+
+            if(verbose) trace('compute() fn $fnName($valOfArgs)');
+
+            // * compute result
+            return InterpreterUtils.calcWithValOfArgs(j, valOfArgs); // compute result with actual values of arguments
+
             case Arr(arrName, args):
             // * lookup arrName in program
             var termCandidate:Term = lookupTermsByNameAndMatchingArgs(arrName, args);
