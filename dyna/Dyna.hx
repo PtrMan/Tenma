@@ -65,6 +65,7 @@ class Dyna {
             varFile.vars.set("a", ArrObj.create([5.0, 2.0]));
 
             var strategy = new BackwardRecursiveStrategy(varFile);
+            strategy.verbose = true;
             strategy.prgm = [
                 // b(X) := a(X)+8.0.
                 Term.Assign(Aggregation.NONE,Op.Arr("b",[Op.Var("X")]),  [Op.AddArr([Op.Arr("a",[Op.Var("X")]), Op.ConstFloat(8.0)])]),
@@ -1153,13 +1154,19 @@ class BackwardRecursiveStrategy {
     public var memorized:Map<String, Float> = new Map<String, Float>();
     public var memorize:Bool = true; // is memorization enabled?
 
+    public var verbose=false;
+
     public function new(varFile) {
         this.varFile = varFile;
     }
 
+    public function flushMemo() {
+        memorized.clear();
+    }
+
     // /param j is the looked up "head"
     public function lookup(j:Op): Float {
-        trace('lookup() w/ ${OpUtils.convToStr(j)}');
+        if(verbose) trace('lookup() w/ ${OpUtils.convToStr(j)}');
 
         var v: Float = Math.NaN; // read value
         var isVKnown = false; // do we know anything about j?
@@ -1167,7 +1174,7 @@ class BackwardRecursiveStrategy {
         { // try to find it in memorization database
             var jKey:String = OpUtils.convToStr(j); // use string as key
             if (memorized.exists(jKey)) {
-                trace('   found in memo');
+                if(verbose) trace('   found in memo');
                 v = memorized.get(jKey);
                 isVKnown = true;
             }
@@ -1235,16 +1242,16 @@ class BackwardRecursiveStrategy {
                     var iCalleeHeadArg:Op = fnHeadArgs[iArgIdx];
                     var iCallerHeadArg:Op = args[iArgIdx];
 
-                    trace('rewrite');
-                    trace('   ${OpUtils.convToStr(rewriteFnBody)}');
-                    trace('   ${OpUtils.convToStr(iCalleeHeadArg)}');
-                    trace('   ${OpUtils.convToStr(iCallerHeadArg)}');
+                    if(verbose) trace('rewrite');
+                    if(verbose) trace('   ${OpUtils.convToStr(rewriteFnBody)}');
+                    if(verbose) trace('   ${OpUtils.convToStr(iCalleeHeadArg)}');
+                    if(verbose) trace('   ${OpUtils.convToStr(iCallerHeadArg)}');
                     rewriteFnBody = OpUtils.subst(rewriteFnBody, iCalleeHeadArg, iCallerHeadArg);
-                    trace('|-');
-                    trace('    ${OpUtils.convToStr(rewriteFnBody)}');
+                    if(verbose) trace('|-');
+                    if(verbose) trace('    ${OpUtils.convToStr(rewriteFnBody)}');
                 }
                 
-                trace('fn body rewrite result = ${OpUtils.convToStr(rewriteFnBody)}');
+                if(verbose) trace('fn body rewrite result = ${OpUtils.convToStr(rewriteFnBody)}');
 
                 
 
