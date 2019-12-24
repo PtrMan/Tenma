@@ -1234,11 +1234,12 @@ class BackwardRecursiveStrategy {
 
             case Arr(arrName, args):
             // * lookup arrName in program
-            var termCandidate:Term = lookupTermsByNameAndMatchingArgs(arrName, args);
-            if (termCandidate == null) { // didn't we find a candidate?
+            var termCandidates:Array<Term> = lookupTermsByNameAndMatchingArgs(arrName, args);
+            if (termCandidates.length == 0) { // didn't we find a candidate?
                 // we can't continue execution because we couldn't find the Term which describes the function
                 throw 'Runtime error: call "${OpUtils.convToStr(j)}" doesn\'t match with any heads in program!';
             }
+            var termCandidate = termCandidates[termCandidates.length-1]; // take last one because we care about the last term definition
 
             switch(termCandidate) {
                 case Assign(Aggregation.NONE, Arr(_, fnHeadArgs), [fnBody]):
@@ -1288,7 +1289,7 @@ class BackwardRecursiveStrategy {
     // looks up matching terms in the program
     // /param args is used to match existing terms in the program to fitting ones
     // /return null if no matching candidate was found
-    private function lookupTermsByNameAndMatchingArgs(name:String, args:Array<Op>): Term {
+    private function lookupTermsByNameAndMatchingArgs(name:String, args:Array<Op>): Array<Term> {
         // function to check if the args can unify
         function checkUnify(a:Array<Op>, b:Array<Op>):Bool {
             if (a.length != b.length)  return false; // can't match up if it has different lengths
@@ -1304,16 +1305,18 @@ class BackwardRecursiveStrategy {
             return true; // can unify if nothing failed
         }
         
+        var matching = [];
+
         for(iTerm in prgm) {
             switch(iTerm) {
                 case Assign(Aggregation.NONE, Op.Arr(headName, headArgs), _) if (headName == name && checkUnify(headArgs, args)):
-                return iTerm;
+                matching.push(iTerm);
                 
                 case _: // simply ignore
             }
         }
         
-        return null; // no match
+        return matching;
     }
 }
 
