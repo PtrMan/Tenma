@@ -64,10 +64,38 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 package dyna;
 
 class Dyna {
+    // TODO< move to Assert class >
+    public static function AssertEqFloat(a:Float, b:Float) {
+        if(Math.abs(a-b)>0.0001) {
+            throw 'assert($a == $b) failed!';
+        }
+    }
+
+    // check BackwardRecursiveStrategy
+    public static function UnittestBackwardRecStrategy1() {
+        var varFile = new VarFile();
+        varFile.vars.set("a", ArrObj.create([5.0, 2.0]));
+
+        var strategy = new BackwardRecursiveStrategy(varFile);
+        strategy.verbose = true;
+        strategy.prgm = [
+            // b(X) := a(X)+8.0.
+            Term.Assign(Aggregation.NONE,Op.Arr("b",[Op.Var("X")]),  [Op.AddArr([Op.Arr("a",[Op.Var("X")]), Op.ConstFloat(8.0)])]),
+        ];
+
+
+        // b(0)
+        var queryExpr:Op = Op.Arr("b", [Op.ConstInt(0)]);
+        var result: Float = strategy.lookup(queryExpr);
+        AssertEqFloat(13.0, result);
+        Sys.println(result); // compute solution
+    }
+
     public static function main() {
         UnittestUnroller.testOneVars2();
         UnittestUnroller.testTwoVars();
 
+        UnittestBackwardRecStrategy1();
 
         { // check BackwardRecursiveStrategy
             
