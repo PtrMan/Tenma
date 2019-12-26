@@ -500,63 +500,8 @@ class Unroller {
                     trace('$iKey : $varNames');
                 }
             }
-
-            // TODO REFACTOR< pull out and unittest >
-            // Compute which rules access which constraints.
-            // Does not "fold" rule accesses in any way
-            // 
-            // ex:    a(I,J,0)*b(I)
-            //     returns
-            //        [{rule:"a", params:[Op.Var("I"),Op.Var("J"),Op.ConstInt(0)]}, {rule:"b", params:[Op.Var("I")]}]
-            // 
-            // argument orders are always kept
-            function retRuleAccesses(op:Op): Array<{rule:String, params:Array<Op>}> {
-                // is a recursive function
-                var accesses = [];
-
-                // internal helper function to collect result recursivly
-                function internalRec(op:Op) {
-
-                    switch(op) {
-                        case Var(name):
-                        case ConstFloat(val):
-                        case ConstInt(val):
-
-
-                        case Arr(fnName, args) if (["exp","sqrt","abs","pow","cos","sin","min","max","log"].filter(iv -> iv == fnName).length > 0):
-                        for(iArg in args) internalRec(iArg);                        
-                        case Arr(arrName, idxs): // is array access  ex: a(I)
-                        accesses.push({rule:arrName, params:idxs});
-                        
-                        case AddArr(args):
-                        for(iArg in args) internalRec(iArg);
-
-                        case MulArr(args):
-                        for(iArg in args) internalRec(iArg);
-
-                        case Div(arg0, arg1):
-                        internalRec(arg0);
-                        internalRec(arg1);
-
-
-                        case UnaryNeg(arg):
-                        internalRec(arg);
-
-                        case Trinary(cond, truePath, falsePath):
-                        internalRec(cond);
-                        internalRec(truePath);
-                        internalRec(falsePath);
-                        
-                        case TempVal(name):
-                    }
-                }
-
-                internalRec(op);
-
-                return accesses;
-            }
             
-            var ruleAccesses:Array<{rule:String, params:Array<Op>}> = retRuleAccesses(body2);
+            var ruleAccesses:Array<{rule:String, params:Array<Op>}> = OpUtils.retRuleAccesses(body2);
 
             var commonVarAssignments: Array<VarAssigment> = []; // constraints which are common between all used rules
             { // compute common constraints
@@ -1131,6 +1076,61 @@ class OpUtils {
     // replaces a variable with a actual value(index)
     public static function replaceVar(op:Op, varname:String, replacement:Op): Op {
         return subst(op, Var(varname), replacement);
+    }
+
+    // TODO REFACTOR< pull out and unittest >
+    // Compute which rules access which constraints.
+    // Does not "fold" rule accesses in any way
+    // 
+    // ex:    a(I,J,0)*b(I)
+    //     returns
+    //        [{rule:"a", params:[Op.Var("I"),Op.Var("J"),Op.ConstInt(0)]}, {rule:"b", params:[Op.Var("I")]}]
+    // 
+    // argument orders are always kept
+    public static function retRuleAccesses(op:Op): Array<{rule:String, params:Array<Op>}> {
+        // is a recursive function
+        var accesses = [];
+
+        // internal helper function to collect result recursivly
+        function internalRec(op:Op) {
+
+            switch(op) {
+                case Var(name):
+                case ConstFloat(val):
+                case ConstInt(val):
+
+
+                case Arr(fnName, args) if (["exp","sqrt","abs","pow","cos","sin","min","max","log"].filter(iv -> iv == fnName).length > 0):
+                for(iArg in args) internalRec(iArg);                        
+                case Arr(arrName, idxs): // is array access  ex: a(I)
+                accesses.push({rule:arrName, params:idxs});
+                
+                case AddArr(args):
+                for(iArg in args) internalRec(iArg);
+
+                case MulArr(args):
+                for(iArg in args) internalRec(iArg);
+
+                case Div(arg0, arg1):
+                internalRec(arg0);
+                internalRec(arg1);
+
+
+                case UnaryNeg(arg):
+                internalRec(arg);
+
+                case Trinary(cond, truePath, falsePath):
+                internalRec(cond);
+                internalRec(truePath);
+                internalRec(falsePath);
+                
+                case TempVal(name):
+            }
+        }
+
+        internalRec(op);
+
+        return accesses;
     }
 }
 
