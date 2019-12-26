@@ -488,81 +488,11 @@ class Unroller {
             case Term.Assign(aggr, Op.Arr(arrNameDest, destIdxs), [body]):
             
             var body2:Op = substFnDefsByBody(body); // body2 is the body after "inlineing" of function definitions
-
-            // compute accessed (array) variables by variable name
-            // ex: a(I)*b(I) -> I has array-vars [a, b]
-            var arrayVarsByVariable = new Map<String, Array<String>>();
-            OpUtils.retArrAccess(body2, arrayVarsByVariable);
-
-            if(false) { // debug content of arrayVarsByVariable
-                for(iKey in arrayVarsByVariable.keys()) {
-                    var varNames = arrayVarsByVariable[iKey];
-                    trace('$iKey : $varNames');
-                }
-            }
             
-            var ruleAccesses:Array<{rule:String, params:Array<Op>}> = OpUtils.retRuleAccesses(body2);
-
-            var commonVarAssignments: Array<VarAssigment> = []; // constraints which are common between all used rules
-            { // compute common constraints
-                { // init with first constraint
-                    var rule0 = ruleAccesses[0].rule; // name of the first accessed rule
-                    var params0 = ruleAccesses[0].params; // parameters
-
-                    if( !varFile.vars.exists(rule0) ) { // check if the accessed rule doesn't map to a variable
-                        throw 'Compilation Error: $rule0 is not a known variable!';
-                    }
-                    var arr:ArrObj = varFile.vars.get(rule0); // fetch array by name
-
-                    //trace('rule=$rule0 params=${params0.map(i -> OpUtils.convToStr(i))}');
-                    commonVarAssignments = FnConstraintSolver.assignConstraint(params0, arr);
-                }
-
-                // iterate over all other rules and narrow constraints down
-                for (iAccessIdx in 1...ruleAccesses.length) {
-                    var iRuleAccess = ruleAccesses[iAccessIdx];
-
-                    var ruleN = iRuleAccess.rule; // name of the first accessed rule
-                    var paramsN = iRuleAccess.params; // parameters
-
-                    if( !varFile.vars.exists(ruleN) ) { // check if the accessed rule doesn't map to a variable
-                        throw 'Compilation Error: $ruleN is not a known variable!';
-                    }
-                    var arr:ArrObj = varFile.vars.get(ruleN); // fetch array by name
-
-                    //trace('rule=$ruleN params=${paramsN.map(i -> OpUtils.convToStr(i))}');
-                    var thisVarAssigments = FnConstraintSolver.assignConstraint(paramsN, arr);
-                    commonVarAssignments = ConstraintUtils.calcCommonConstraints(commonVarAssignments, thisVarAssigments); // constraints have to have common elements if they intersect or they have to be the cartesian product if not
-                }
-            }
-
-
-
-
-            function instantiateBodyWithVarAssigment(varAssignment:VarAssigment):Term {
-                var righthandSide:Op = body2;
-                
-                // replace vars of righthandside
-                for (iAssigmentVarName in varAssignment.assignments.keys()) {
-                    var assignedIndex:Int = varAssignment.assignments.get(iAssigmentVarName); // the assigned index for the variable
-                    var replaceOp:Op = Op.ConstInt(assignedIndex);// Op with which we substitute it
-                    righthandSide = OpUtils.replaceVar(righthandSide, iAssigmentVarName, replaceOp);
-                }
-
-                // replace vars of lefthandside
-                var lefthandSide:Op = Op.Arr(arrNameDest, destIdxs);
-                for (iAssigmentVarName in varAssignment.assignments.keys()) {
-                    var assignedIndex:Int = varAssignment.assignments.get(iAssigmentVarName); // the assigned index for the variable
-                    var replaceOp:Op = Op.ConstInt(assignedIndex);// Op with which we substitute it
-                    lefthandSide = OpUtils.replaceVar(lefthandSide, iAssigmentVarName, replaceOp);
-                }
-                
-                return Term.Assign(aggr, lefthandSide, [righthandSide]);
-            }
-            
+            var commonVarAssignments:Array<VarAssigment> = VarAssignmentUtils.retCommonVarAssignments(body2, varFile);
             // instantiate body of Rule for each variable assignment
             for (iVarAssignment in commonVarAssignments) {
-                resArr.push(instantiateBodyWithVarAssigment(iVarAssignment));
+                resArr.push(VarAssignmentUtils.instantiateBodyWithVarAssigment(term, body2, iVarAssignment));
             }
 
             case Assign(_,_,_):
@@ -1653,6 +1583,89 @@ class VarAssigment {
     // helper to compute unique key to identify this assignment
     public function calcKey():String {
         return [for (iName in assignments.keys()) '$iName#${assignments.get(iName)}'].join("#");
+    }
+}
+
+// tools for VarAssignment
+class VarAssignmentUtils {
+    // computes common variable assignments of a rule-body
+    public static function retCommonVarAssignments(body2:Op, varFile:VarFile): Array<VarAssigment> {
+        // compute accessed (array) variables by variable name
+        // ex: a(I)*b(I) -> I has array-vars [a, b]
+        var arrayVarsByVariable = new Map<String, Array<String>>();
+        OpUtils.retArrAccess(body2, arrayVarsByVariable);
+
+        if(false) { // debug content of arrayVarsByVariable
+            for(iKey in arrayVarsByVariable.keys()) {
+                var varNames = arrayVarsByVariable[iKey];
+                trace('$iKey : $varNames');
+            }
+        }
+        
+        var ruleAccesses:Array<{rule:String, params:Array<Op>}> = OpUtils.retRuleAccesses(body2);
+
+        var commonVarAssignments: Array<VarAssigment> = []; // constraints which are common between all used rules
+        { // compute common constraints
+            { // init with first constraint
+                var rule0 = ruleAccesses[0].rule; // name of the first accessed rule
+                var params0 = ruleAccesses[0].params; // parameters
+
+                if( !varFile.vars.exists(rule0) ) { // check if the accessed rule doesn't map to a variable
+                    throw 'Compilation Error: $rule0 is not a known variable!';
+                }
+                var arr:ArrObj = varFile.vars.get(rule0); // fetch array by name
+
+                //trace('rule=$rule0 params=${params0.map(i -> OpUtils.convToStr(i))}');
+                commonVarAssignments = FnConstraintSolver.assignConstraint(params0, arr);
+            }
+
+            // iterate over all other rules and narrow constraints down
+            for (iAccessIdx in 1...ruleAccesses.length) {
+                var iRuleAccess = ruleAccesses[iAccessIdx];
+
+                var ruleN = iRuleAccess.rule; // name of the first accessed rule
+                var paramsN = iRuleAccess.params; // parameters
+
+                if( !varFile.vars.exists(ruleN) ) { // check if the accessed rule doesn't map to a variable
+                    throw 'Compilation Error: $ruleN is not a known variable!';
+                }
+                var arr:ArrObj = varFile.vars.get(ruleN); // fetch array by name
+
+                //trace('rule=$ruleN params=${paramsN.map(i -> OpUtils.convToStr(i))}');
+                var thisVarAssigments = FnConstraintSolver.assignConstraint(paramsN, arr);
+                commonVarAssignments = ConstraintUtils.calcCommonConstraints(commonVarAssignments, thisVarAssigments); // constraints have to have common elements if they intersect or they have to be the cartesian product if not
+            }
+        }
+
+        return commonVarAssignments;
+    }
+
+    // /param term is the complete term from which the body has to get instantiated
+    public static function instantiateBodyWithVarAssigment(term:Term, body2:Op, varAssignment:VarAssigment):Term {
+        switch(term) {
+            case Term.Assign(aggr, Op.Arr(arrNameDest, destIdxs), [body]):
+
+            var righthandSide:Op = body2;
+            
+            // replace vars of righthandside
+            for (iAssigmentVarName in varAssignment.assignments.keys()) {
+                var assignedIndex:Int = varAssignment.assignments.get(iAssigmentVarName); // the assigned index for the variable
+                var replaceOp:Op = Op.ConstInt(assignedIndex);// Op with which we substitute it
+                righthandSide = OpUtils.replaceVar(righthandSide, iAssigmentVarName, replaceOp);
+            }
+
+            // replace vars of lefthandside
+            var lefthandSide:Op = Op.Arr(arrNameDest, destIdxs);
+            for (iAssigmentVarName in varAssignment.assignments.keys()) {
+                var assignedIndex:Int = varAssignment.assignments.get(iAssigmentVarName); // the assigned index for the variable
+                var replaceOp:Op = Op.ConstInt(assignedIndex);// Op with which we substitute it
+                lefthandSide = OpUtils.replaceVar(lefthandSide, iAssigmentVarName, replaceOp);
+            }
+            
+            return Term.Assign(aggr, lefthandSide, [righthandSide]);
+            case _:
+            throw "Not implemented case"; // can be internal error
+        }
     }
 }
 
