@@ -291,7 +291,7 @@ class UnittestUnroller {
     public static function testOneVars2() {
         var op:Op = Op.Arr("a", [Op.Var("I"), Op.Var("I")]);
         var res = new Map<String, Array<String>>();
-        Unroller.retArrAccess(op, res);
+        OpUtils.retArrAccess(op, res);
         
         var keys = [for (k in res.keys()) k];
         
@@ -309,7 +309,7 @@ class UnittestUnroller {
     public static function testTwoVars() {
         var op:Op = Op.Arr("a", [Op.Var("I"), Op.Var("J")]);
         var res = new Map<String, Array<String>>();
-        Unroller.retArrAccess(op, res);
+        OpUtils.retArrAccess(op, res);
         
         var keys = [for (k in res.keys()) k];
         
@@ -492,7 +492,7 @@ class Unroller {
             // compute accessed (array) variables by variable name
             // ex: a(I)*b(I) -> I has array-vars [a, b]
             var arrayVarsByVariable = new Map<String, Array<String>>();
-            retArrAccess(body2, arrayVarsByVariable);
+            OpUtils.retArrAccess(body2, arrayVarsByVariable);
 
             if(false) { // debug content of arrayVarsByVariable
                 for(iKey in arrayVarsByVariable.keys()) {
@@ -576,97 +576,6 @@ class Unroller {
         }
 
         return resArr;
-    }
-
-    // public for unittesting
-    // helper
-    // returns all accessed variable array names by variable name
-    public static function retArrAccess(op:Op, res:Map<String, Array<String>>) {
-        function hasOnlyVars(ops:Array<Op>):Bool {
-            return ops.filter(v -> {
-                return switch(v) {
-                    case Var(_): true;
-                    case _: false;
-                }
-                }).length == ops.length;
-        }
-
-        // expects that ops are only variables
-        function retVarNames(ops:Array<Op>):Array<String> {
-            return SetUtil.uniqueSet(ops.map(iOp -> return switch(iOp) {
-                case Var(name): name;
-                case _: throw "Expected only Var!";
-            }));
-        }
-
-        switch(op) {
-            case Var(name):
-            case ConstFloat(val):
-            case ConstInt(val):
-            
-            // is function?
-            case Arr(fnName, args) if (["exp","sqrt","abs","pow","cos","sin","min","max","log"].filter(iv -> iv == fnName).length > 0):
-            for(iArg in args) retArrAccess(iArg, res);
-            
-            case Arr(arrName, idxs) if (hasOnlyVars(idxs)): // is array access   ex: a(I)            
-            for (iVarName in retVarNames(idxs)) { // iterate over all variable names of array access
-                {
-                    var found=false;
-                    for(iKey in res.keys()) {
-                        if (iKey == iVarName) {
-                            found=true;
-                            break;
-                        }
-                    }
-
-                    if (!found) {
-                        res.set(iVarName, []);
-                    }
-                }
-                var varnames = res.get(iVarName);
-
-                var found=false;
-                for(iName in varnames) {
-                    if (iName == arrName) {
-                        found=true;
-                        break;
-                    }
-                }
-
-                if(!found) { // necessary because it is supposed to be a set
-                    varnames.push(arrName);
-                }
-                res.set(iVarName, varnames);
-            }
-
-            
-
-
-            case Arr(name, idxs):
-            // ignore
-            trace('warning - ignore Arr');
-
-            case AddArr(args):
-            for(iArg in args) retArrAccess(iArg, res);
-
-            case MulArr(args):
-            for(iArg in args) retArrAccess(iArg, res);
-
-            case Div(arg0, arg1):
-            retArrAccess(arg0, res);
-            retArrAccess(arg1, res);
-
-            case UnaryNeg(arg):
-            retArrAccess(arg, res);
-
-            case Trinary(cond, truePath, falsePath):
-            retArrAccess(cond, res);
-            retArrAccess(truePath, res);
-            retArrAccess(falsePath, res);
-            
-            case TempVal(name):
-            return;
-        }
     }
 }
 
@@ -1078,7 +987,8 @@ class OpUtils {
         return subst(op, Var(varname), replacement);
     }
 
-    // TODO REFACTOR< pull out and unittest >
+
+    // TODO< unittest >
     // Compute which rules access which constraints.
     // Does not "fold" rule accesses in any way
     // 
@@ -1131,6 +1041,96 @@ class OpUtils {
         internalRec(op);
 
         return accesses;
+    }
+
+    // helper
+    // returns all accessed variable array names by variable name
+    public static function retArrAccess(op:Op, res:Map<String, Array<String>>) {
+        function hasOnlyVars(ops:Array<Op>):Bool {
+            return ops.filter(v -> {
+                return switch(v) {
+                    case Var(_): true;
+                    case _: false;
+                }
+                }).length == ops.length;
+        }
+
+        // expects that ops are only variables
+        function retVarNames(ops:Array<Op>):Array<String> {
+            return SetUtil.uniqueSet(ops.map(iOp -> return switch(iOp) {
+                case Var(name): name;
+                case _: throw "Expected only Var!";
+            }));
+        }
+
+        switch(op) {
+            case Var(name):
+            case ConstFloat(val):
+            case ConstInt(val):
+            
+            // is function?
+            case Arr(fnName, args) if (["exp","sqrt","abs","pow","cos","sin","min","max","log"].filter(iv -> iv == fnName).length > 0):
+            for(iArg in args) retArrAccess(iArg, res);
+            
+            case Arr(arrName, idxs) if (hasOnlyVars(idxs)): // is array access   ex: a(I)            
+            for (iVarName in retVarNames(idxs)) { // iterate over all variable names of array access
+                {
+                    var found=false;
+                    for(iKey in res.keys()) {
+                        if (iKey == iVarName) {
+                            found=true;
+                            break;
+                        }
+                    }
+
+                    if (!found) {
+                        res.set(iVarName, []);
+                    }
+                }
+                var varnames = res.get(iVarName);
+
+                var found=false;
+                for(iName in varnames) {
+                    if (iName == arrName) {
+                        found=true;
+                        break;
+                    }
+                }
+
+                if(!found) { // necessary because it is supposed to be a set
+                    varnames.push(arrName);
+                }
+                res.set(iVarName, varnames);
+            }
+
+            
+
+
+            case Arr(name, idxs):
+            // ignore
+            trace('warning - ignore Arr');
+
+            case AddArr(args):
+            for(iArg in args) retArrAccess(iArg, res);
+
+            case MulArr(args):
+            for(iArg in args) retArrAccess(iArg, res);
+
+            case Div(arg0, arg1):
+            retArrAccess(arg0, res);
+            retArrAccess(arg1, res);
+
+            case UnaryNeg(arg):
+            retArrAccess(arg, res);
+
+            case Trinary(cond, truePath, falsePath):
+            retArrAccess(cond, res);
+            retArrAccess(truePath, res);
+            retArrAccess(falsePath, res);
+            
+            case TempVal(name):
+            return;
+        }
     }
 }
 
